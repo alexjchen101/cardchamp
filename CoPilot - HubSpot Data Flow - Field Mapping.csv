@@ -1,0 +1,37 @@
+,,,,,,,
+CoPilot Field,HubSpot Field Type 1,HubSpot Property Type,HubSpot Contact Field Name,,HubSpot Field Type 2,Considerations,ADDITIONAL QUESTIONS
+None Available,Contact,Multi-line text,CoPilot Account #,,NA,We will manually add the CoPilot Account # from the web browser daily into this HubSpot contact field.,
+,,,,,,,
+None Available,Contact,Dropdown select,Current Processor,,NA,"Once the merchant account is in a boarded status, this field should automatically update to CardChamp as the dropdown.",
+None Available,Contact,Multiple checkboxes,Status.,,,"Once the merchant account is in a boarded status, this field should automatically update to Customer as the dropdown. Some contacts are also Sales Partners. We would need to make sure that if Sales Agent or Brand Ambassador are also selected from the dropdown, that they would remain the same, along with the Customer selection.",
+,,,,,,,
+First Name,Contact,Single-line text,First Name,,NA,The CoPilot field should update and equal the HubSpot contact field.,
+Last Name,Contact,Single-line text,Last Name,,NA,The CoPilot field should update and equal the HubSpot contact field.,
+Email Address,Contact,Text,Email,,NA,The CoPilot field should update and equal the HubSpot contact field.,
+Phone Number,Contact,Text,Phone Number,,NA,The CoPilot field should update and equal the HubSpot contact field.,
+DBA Name,Contact,Single-line text,Company Name,,Deal,"This field needs to both flow through as a Contact and Deal. The following note is only for the Contact portion: If a merchant has multiple companies, we will need the fields to be updated with the newest company starting first. For example, Newest Company 1 / New Company 2 / New Company 3",
+Address 1,Contact,Single-line text,Street address,,NA,"If a merchant has multiple companies, we should just make the newest merchant account data the most recent option and override anything else.",
+City,Contact,Single-line text,City,,NA,"If a merchant has multiple companies, we should just make the newest merchant account data the most recent option and override anything else.",
+State,Contact,Dropdown select,State,,NA,"If a merchant has multiple companies, we should just make the newest merchant account data the most recent option and override anything else.",
+Zip,Contact,Text,Postal code,,NA,"If a merchant has multiple companies, we should just make the newest merchant account data the most recent option and override anything else.",
+Mobile Phone Number,Contact,Text,Mobile Phone Number,,NA,The CoPilot field should update and equal the HubSpot contact field.,
+,,,,,,,
+,,,,,,,
+Industry (MCC),Contact,Multiple checkboxes,Industry (MCC),,NA,"The MCC Code should flow to MCC Code. If an additional merchant account that is associated with the email address has a different MCC Code, then it should also be selected.",
+Average Monthly Volume,Contact,Dropdown select,Average Monthly Volume,,Deal,This field needs to both flow through as a Contact and Deal.  The dollar amount listed in CoPilot would need to flow to the dollar amount listed on the Deal.,
+,,,,,,,
+Pricing Type,Contact,Multiple checkboxes,Pricing Type,,NA,"The CoPilot field should update and equal the HubSpot contact field. If the merchant has multiple merchant accounts with different pricing structures, all applicable pricing structures should be selected.",
+,,,,,,,
+Orders,Contact,,Point of Sale / Gateway,,,Orders should pull through and match the Point of Sale / Gateway field. We need to make sure that if the only thing that is listed is CardPointe Gateway (RapidConnect North) and no order or Production Credentials ticket is created then the HubSpot field is defaulted to CardPointe Virtual Terminal.,There are thousands of gateways. What happens when a field from CoPilot is pulled and there is nothing in HubSpot to Match?
+Cardpointe Services - Production Credentials,Contact,,,,,See comment above^,
+,,,,,,,
+ACH from Fiserv,Contact,Dropdown select,ACH Provider,,,"If ACH From Fiserv is enabled, then Fiserv ACH should be automatically selected from the dropdown.",
+,,,,,,,
+Sales Code:,Contact,,Contact Owner,,Deal,"This field needs to both flow through as a Contact and Deal. We would need to make sure the lowest level sales partner in the hierarchy is who is who the Merchant is assigned to as both a HubSpot Contact and HubSpot Deal. As a reference point, sometimes we have referral partners who earn revenue from the merchant account. The lowest level referral partner would be the HubSpot Contact.","Currently, we have the sales partner listed as the Contact Owner in HubSpot. We do not have a Sales Code associated anywhere. What is going to be the best practice for making sure the right sales partner is attributed to both the Contact and the Deal?"
+Reporting MID,Contact,Multi-line text,Reporting MID,,,"If a merchant has multiple merchant accounts, we will need the fields to be updated with the newest MID starting first. For example, Newest MID 1 / 2nd New MID 2 / Original MID 3",
+Live Date,Contact,Single-line text,Live Date,,Deal,"1. On the 3rd of each month, the fees are debited from a merchant's bank account. Most merchant accounts have a Monthly Platform Fee that is billed whether a merchant has begun processing yet or not. If a merchant signs up towards the end of the month, often they are not actually live and processing and have their monthly fee debited, which moves the status in CoPilot from Boarded to Live, even though the merchant is not truly live and processing transactions yet. What about merchants who have not processed yet, but automatically have the CoPilot status changed to Live. 2. We need to make sure the current HubSpot WorkFlows occur where it sends an automated Email Template to the Merchant about Next Steps with CardChamp.","If there are multiple locations, how do we determine the Live Date?"
+MTD Volume,Contact,Single-line text,MTD Volume,,NA,The CoPilot field should update and equal the HubSpot contact field.,"If there are multiple merchant accounts, can we have all accounts associated with the CoPilot account number be the sum of the MTD Volume?"
+YTD Volume,Contact,Single-line text,YTD Volume,,NA,The CoPilot field should update and equal the HubSpot contact field.,"If there are multiple merchant accounts, can we have all accounts associated with the CoPilot account number be the sum of the YTD Volume?"
+Last Date Deposit,Contact,Date picker,Last Date Deposit,,NA,The CoPilot field should update and equal the HubSpot contact field.,"If there are multiple locations, how do we determine the last deposit date?"
+Date Boarded,Contact,Date and time picker,Date Boarded,,Deal,This would need to move the Deal from whatever Deal stage it is currently in over to the Boarded Deal stage.,"If there are multiple locations, what do we do about Date Boarded?"
+PCI Compliance,Contact,Multiple checkboxes,PCI Compliance,,NA,The CoPilot field should update and equal the HubSpot contact field.,"Almost all multiple locations are linked for PCI (meaning one account covers the rest). In the rare instance, where a contact owner has more than one location and they are not linked and one is PCI Compliant and one is not PCI Compliant, can we have the account the is NOT PCI Compliant override this contact property?"

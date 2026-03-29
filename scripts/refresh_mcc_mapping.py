@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Refresh MCC mapping from HubSpot industry options.
-Run when HubSpot adds/updates industry dropdown options.
+Refresh MCC mapping from HubSpot Industry (MCC) options.
+Run when HubSpot adds/updates ``industry_mcc`` dropdown options.
 
 Usage: python3 scripts/refresh_mcc_mapping.py
 Requires: HUBSPOT_ACCESS_TOKEN in .env
@@ -23,7 +23,7 @@ def main():
         print("Error: HUBSPOT_ACCESS_TOKEN not found in .env")
         sys.exit(1)
 
-    url = "https://api.hubapi.com/crm/v3/properties/contacts/industry"
+    url = "https://api.hubapi.com/crm/v3/properties/contacts/industry_mcc"
     r = requests.get(url, headers={"Authorization": f"Bearer {token}"})
     r.raise_for_status()
     opts = r.json().get("options", [])
@@ -41,8 +41,8 @@ def main():
     out_path = Path(__file__).parent.parent / "mcc_mapping.py"
     with open(out_path, "w") as f:
         f.write('"""\nMCC Code to HubSpot Industry Mapping\n')
-        f.write("Auto-generated from HubSpot industry property options.\n")
-        f.write('Maps CoPilot mccId to HubSpot industry value.\n"""\n\n')
+        f.write("Auto-generated from HubSpot industry_mcc property options.\n")
+        f.write('Maps CoPilot mccId to HubSpot industry_mcc option value.\n"""\n\n')
         f.write("MCC_TO_INDUSTRY = {\n")
         for mcc in sorted(mcc_to_value.keys(), key=lambda x: int(x) if x.isdigit() else 0):
             val = mcc_to_value[mcc].replace("\\", "\\\\").replace('"', '\\"')

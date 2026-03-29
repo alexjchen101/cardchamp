@@ -19,13 +19,22 @@ Example:
 """
 
 import sys
+from datetime import datetime, timezone
 from copilot import MerchantAPI
 from hubspot.client import HubSpotClient
 from field_mappings import (
     map_copilot_to_hubspot,
+    build_ordered_hardware_display,
+    build_point_of_sale_multiselect_value,
+    build_pricing_type_multiselect_value,
+    build_industry_mcc_multiselect_value,
+    extract_address_updates_from_merchant_data,
     get_copilot_accounts_from_contact,
     get_company_names_slash_separated,
+    merge_multiselect_values,
+    remove_multiselect_options,
     extract_deal_amount,
+    extract_sales_code,
     volume_to_range,
 )
 from status_logic import (
@@ -33,6 +42,18 @@ from status_logic import (
     get_status,
     get_current_processor,
 )
+
+
+def _copilot_datetime_to_hubspot_millis(dt_str):
+    """Convert CoPilot datetime string (MM/DD/YYYY H:MM:SS AM/PM) to epoch millis."""
+    if not dt_str:
+        return None
+    try:
+        dt = datetime.strptime(str(dt_str).strip(), "%m/%d/%Y %I:%M:%S %p")
+    except (TypeError, ValueError):
+        return None
+    dt = dt.replace(tzinfo=timezone.utc)
+    return str(int(dt.timestamp() * 1000))
 
 
 def sync_with_status(contact_email):
@@ -78,8 +99,9 @@ def sync_with_status(contact_email):
         contact = hubspot.get_contact(contact_id, properties=[
             "firstname", "lastname", "email", "phone", "mobilephone",
             "company", "lifecyclestage", "hubspot_owner_id", "current_processor",
-            "state", "zip", "city", "address", "website", "platform", "industry",
-            "monthly_processing_volume", "merchant_id", "date_of_birth", "status_2__cloned_"
+            "state", "zip", "city", "address", "website", "platform",
+            "monthly_processing_volume", "merchant_id", "date_of_birth", "status_2__cloned_",
+            "pricing_type", "date_boarded", "live_date", "sales_code", "industry_mcc",
         ])
         current_props = contact.get("properties", {})
     except Exception as e:
@@ -91,9 +113,13 @@ def sync_with_status(contact_email):
     first_merchant_data = None
     first_status_data = None
     first_signature_data = None
+    all_status_data = []
     all_merchant_data = []
     total_volume = 0
+    order_list_primary = None
     
+    deal_prop_names = hubspot.get_deal_property_names()
+
     for idx, copilot_id in enumerate(copilot_ids, 1):
         print(f"\n2.{idx}. Fetching CoPilot data for {copilot_id}...")
         
@@ -113,7 +139,12 @@ def sync_with_status(contact_email):
                 first_merchant_data = merchant_data
                 first_status_data = status_data
                 first_signature_data = signature_data
+                try:
+                    order_list_primary = copilot.list_orders(copilot_id, page_size=100, page_number=1)
+                except Exception as e:
+                    print(f"   ℹ️  order/list: {e}")
             all_merchant_data.append(merchant_data)
+            all_status_data.append(status_data)
             
             if multi_business:
                 vol = merchant.get("processing", {}).get("volumeDetails", {}).get("averageMonthlyVolume")
@@ -135,7 +166,12 @@ def sync_with_status(contact_email):
                 deal_amount = extract_deal_amount(merchant_data)
                 if deal_amount and stage_num >= 6:
                     deal_updates["amount"] = str(deal_amount)
-                if current_stage != stage_id or (deal_amount and stage_num >= 6):
+                dsc = extract_sales_code(merchant_data)
+                if dsc and "sales_code" in deal_prop_names:
+                    deal_updates["sales_code"] = dsc
+                if current_stage != stage_id or (deal_amount and stage_num >= 6) or (
+                    dsc and "sales_code" in deal_prop_names
+                ):
                     hubspot._request("PATCH", f"/crm/v3/objects/deals/{deal_id}", {"properties": deal_updates})
                     print(f"   ✓ Deal updated: {deal_name} → {stage_name}")
             else:
@@ -144,6 +180,9 @@ def sync_with_status(contact_email):
                 deal_props = {"dealname": deal_name, "dealstage": stage_id}
                 if deal_amount:
                     deal_props["amount"] = str(deal_amount)
+                dsc_new = extract_sales_code(merchant_data)
+                if dsc_new and "sales_code" in deal_prop_names:
+                    deal_props["sales_code"] = dsc_new
                 if owner_id:
                     deal_props["hubspot_owner_id"] = owner_id
                 response = hubspot._request("POST", "/crm/v3/objects/deals", {"properties": deal_props})
@@ -185,27 +224,113 @@ def sync_with_status(contact_email):
     print(f"4. Updating contact fields...")
     print("="*60)
     
+    pairs = list(zip(copilot_ids, all_merchant_data))
+    ordered_hw = None
+    try:
+        ordered_hw = build_ordered_hardware_display(copilot, pairs)
+    except Exception as e:
+        print(f"   ℹ️  ordered hardware (catalog+orders): {e}")
+    if ordered_hw:
+        print(f"   ✓ Ordered hardware (readable): {ordered_hw[:120]}{'...' if len(ordered_hw) > 120 else ''}")
+
+    pos_def = None
+    try:
+        pos_def = hubspot.get_contact_property_definition("point_of_sale")
+    except Exception as e:
+        print(f"   ℹ️  HubSpot point_of_sale schema (using label fallback): {e}")
+    pos_multiselect = None
+    try:
+        pos_multiselect = build_point_of_sale_multiselect_value(copilot, pairs, pos_def)
+    except Exception as e:
+        print(f"   ℹ️  point_of_sale mapping: {e}")
+    if pos_multiselect:
+        print(f"   ✓ point_of_sale (HubSpot multi-select): {pos_multiselect}")
+    
+    industry_mcc_def = None
+    pricing_def = None
+    try:
+        industry_mcc_def = hubspot.get_contact_property_definition("industry_mcc")
+    except Exception:
+        pass
+    try:
+        pricing_def = hubspot.get_contact_property_definition("pricing_type")
+    except Exception:
+        pass
+
     hubspot_updates = map_copilot_to_hubspot(
-        first_merchant_data, current_props,
-        exclude_business_specific=multi_business
+        first_merchant_data,
+        current_props,
+        exclude_business_specific=multi_business,
+        order_list_response=order_list_primary,
+        point_of_sale_value=pos_multiselect,
     )
     
-    # When multi-business: company = slash-separated, same order as input (primary at end)
+    # When multi-business: company/merchant_id/volume reflect ALL businesses
     if multi_business:
+        # Company: slash-separated names, same order as input (primary at end)
         company_names = get_company_names_slash_separated(all_merchant_data[::-1])
         if company_names:
             hubspot_updates["company"] = company_names
-        first_merchant = first_merchant_data.get("merchant", {})
-        platform = first_merchant.get("processing", {}).get("platformDetails", {})
-        if platform.get("backEndMid"):
-            hubspot_updates["merchant_id"] = str(platform["backEndMid"])
+        # Merchant IDs: slash-separated, same order as input
+        mids = []
+        for md in all_merchant_data[::-1]:
+            plat = md.get("merchant", {}).get("processing", {}).get("platformDetails", {})
+            mid = plat.get("backEndMid")
+            if mid:
+                mids.append(str(mid))
+        if mids:
+            hubspot_updates["merchant_id"] = " / ".join(mids)
+        # Monthly volume: sum of all businesses, mapped to range
         if total_volume:
             hubspot_updates["monthly_processing_volume"] = volume_to_range(total_volume)
     
-    # Add status-driven fields (from first business)
-    contact_status = get_status(first_status_data)
-    if contact_status:
-        hubspot_updates["status_2__cloned_"] = contact_status
+    # CSV truth: address/city/state/zip should come from the newest merchant
+    newest_merchant_data = all_merchant_data[-1] if all_merchant_data else None
+    if newest_merchant_data:
+        hubspot_updates.update(extract_address_updates_from_merchant_data(newest_merchant_data))
+    
+    # Industry (MCC): include all merchant MCC values (multi-checkbox)
+    industry_mcc_multi = build_industry_mcc_multiselect_value(
+        all_merchant_data, industry_mcc_def
+    )
+    if industry_mcc_multi:
+        hubspot_updates["industry_mcc"] = industry_mcc_multi
+
+    # Pricing Type: include all pricing models across merchants
+    pricing_multi = build_pricing_type_multiselect_value(all_merchant_data, pricing_def)
+    if pricing_multi:
+        hubspot_updates["pricing_type"] = pricing_multi
+    
+    # Date Boarded / Live Date from CoPilot status (oldest/primary merchant)
+    if first_status_data:
+        merchant_status = first_status_data.get("merchantStatus", {})
+        boarded_ms = _copilot_datetime_to_hubspot_millis(merchant_status.get("boardedDatetime"))
+        if boarded_ms:
+            hubspot_updates["date_boarded"] = boarded_ms
+        live_dt = merchant_status.get("liveDatetime")
+        if live_dt:
+            hubspot_updates["live_date"] = str(live_dt)
+
+    # Sales Code: OG merchant's CoPilot salesCode → HubSpot contact ``sales_code``
+    og_sales = extract_sales_code(first_merchant_data) if first_merchant_data else None
+    if og_sales:
+        hubspot_updates["sales_code"] = og_sales
+    
+    # Add status-driven fields (preserve existing multi-checkbox selections)
+    any_live = any(
+        (sd.get("merchantStatus", {}).get("boardingProcessStatusCd") == "LIVE")
+        for sd in all_status_data
+    )
+    if any_live:
+        # Graduate to Current Merchant: drop "Potential Merchant", keep other roles (e.g. partners)
+        without_potential = remove_multiselect_options(
+            current_props.get("status_2__cloned_", ""),
+            ["Potential Merchant"],
+        )
+        hubspot_updates["status_2__cloned_"] = merge_multiselect_values(
+            without_potential,
+            ["Current Merchant"],
+        )
     
     processor = get_current_processor(first_status_data)
     if processor is not None:
@@ -224,11 +349,23 @@ def sync_with_status(contact_email):
             print(f"CHANGED: {field} = '{current_value}' → '{new_value}'")
     
     try:
-        hubspot.update_contact(contact_id, hubspot_updates)
+        hubspot.update_contact(contact_id, hubspot_updates, filter_to_existing=True)
         print(f"\n   ✓ Contact updated with {len(hubspot_updates)} fields")
     except Exception as e:
-        print(f"   ✗ Error updating contact: {e}")
-        return False
+        msg = str(e)
+        if "propertyName=email" in msg and "already has that value" in msg and "email" in hubspot_updates:
+            print("   ℹ️  Email already used by another HubSpot contact; retrying without email update")
+            retry_updates = dict(hubspot_updates)
+            retry_updates.pop("email", None)
+            try:
+                hubspot.update_contact(contact_id, retry_updates, filter_to_existing=True)
+                print(f"\n   ✓ Contact updated with {len(retry_updates)} fields (without email)")
+            except Exception as e2:
+                print(f"   ✗ Error updating contact: {e2}")
+                return False
+        else:
+            print(f"   ✗ Error updating contact: {e}")
+            return False
     
     # Success
     _, summary_stage_name, _ = get_deal_stage_from_status(first_status_data, first_signature_data)

@@ -156,6 +156,22 @@ class HubSpotClient:
         """
         response = self._request("GET", "/crm/v3/properties/contacts")
         return {p["name"] for p in response.get("results", [])}
+
+    def get_deal_property_names(self) -> set:
+        """Set of deal property internal names (for optional custom fields like ``sales_code``)."""
+        response = self._request("GET", "/crm/v3/properties/deals")
+        return {p["name"] for p in response.get("results", [])}
+    
+    def get_contact_property_definition(self, property_name: str) -> dict:
+        """
+        Full property schema (options, type, fieldType) for enum / multi-select fields.
+        
+        Multi-select checkbox values must be sent as semicolon-separated **option values**
+        (see each option's ``value`` — often same as ``label`` for custom properties).
+        """
+        from urllib.parse import quote
+        safe = quote(property_name, safe="")
+        return self._request("GET", f"/crm/v3/properties/contacts/{safe}")
     
     def update_contact(self, contact_id: str, properties: dict, filter_to_existing: bool = False) -> dict:
         """

@@ -74,13 +74,18 @@ class MerchantAPI:
     
     def get_merchant(self, merchant_id: str) -> dict:
         """
-        Get all data for a merchant.
+        Get all data for a merchant (``GET /merchant/{merchantId}``).
+        
+        **Flat rate pricing:** If ``response["merchant"]["pricing"]["flatPricing"]`` is
+        present and non-empty, the merchant is on flat-rate (flat) pricing. IC+ lives
+        under ``pricing.icPlusPricing``; swipe tiers under ``pricing.swipeNonSwipePricing``.
+        Only one pricing mode is typically populated.
         
         Args:
             merchant_id: The CoPilot merchant ID
             
         Returns:
-            dict: Full merchant object
+            dict: Full merchant object (includes ``merchant.pricing``)
         """
         return self.client.get(f"/merchant/{merchant_id}")
     
@@ -247,6 +252,82 @@ class MerchantAPI:
             dict: Order details including equipment
         """
         return self.client.get(f"/order/{order_id}")
+    
+    def list_orders(
+        self,
+        merchant_id: str,
+        page_size: int = 50,
+        page_number: int = 1,
+    ) -> dict:
+        """
+        List orders for a merchant (equipment / terminals ordered).
+        
+        GET /order/list?merchantId=...&pageSize=...&pageNumber=...
+        """
+        mid = str(merchant_id).strip()
+        return self.client.get(
+            f"/order/list?merchantId={mid}&pageSize={page_size}&pageNumber={page_number}"
+        )
+    
+    def list_all_orders(self, merchant_id: str, page_size: int = 100) -> list:
+        """All order rows for a merchant (paginated until complete)."""
+        mid = str(merchant_id).strip()
+        all_rows = []
+        page = 1
+        total = None
+        while True:
+            r = self.list_orders(mid, page_size=page_size, page_number=page)
+            rows = r.get("rows") or []
+            all_rows.extend(rows)
+            total = r.get("totalServerItemsCount")
+            if total is not None and len(all_rows) >= total:
+                break
+            if not rows or len(rows) < page_size:
+                break
+            page += 1
+            if page > 50:
+                break
+        return all_rows
+    
+    def get_equipment_catalog_map(self) -> dict:
+        """
+        equipmentId -> {name, type} from equipmentCatalog/list (cached per API client session).
+        name = equipmentName or make+model.
+        """
+        if getattr(self, "_equipment_catalog_map", None) is not None:
+            return self._equipment_catalog_map
+        sales = self.client.sales_code
+        if not sales:
+            self._equipment_catalog_map = {}
+            return self._equipment_catalog_map
+        catalog = {}
+        page = 1
+        page_size = 100
+        while True:
+            r = self.client.get(
+                f"/equipmentCatalog/list?salesCode={sales}&pageSize={page_size}&pageNumber={page}"
+            )
+            rows = r.get("rows") or []
+            for row in rows:
+                eid = row.get("equipmentId")
+                if eid is None:
+                    continue
+                name = row.get("equipmentName") or ""
+                if not name.strip():
+                    mk = (row.get("make") or "").strip()
+                    md = (row.get("model") or "").strip()
+                    name = f"{mk} {md}".strip() or (row.get("description") or "")[:120]
+                catalog[eid] = {
+                    "name": name.strip() or f"Equipment {eid}",
+                    "type": (row.get("equipmentTypeCd") or "").upper(),
+                }
+            if len(rows) < page_size:
+                break
+            page += 1
+            if page > 20:
+                break
+        self._equipment_catalog_map = catalog
+        return self._equipment_catalog_map
     
     # =========================================================================
     # ATTACHMENT OPERATIONS

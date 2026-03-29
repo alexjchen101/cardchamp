@@ -1,68 +1,80 @@
 # Notes
 
-## ⚠️ Uncertainties
+---
 
-### 1. ACH / E-Check Provider
+## 📋 Multi-Merchant (Multiple CoPilot IDs per Contact)
 
-- **CoPilot Field:** `processing.blueChexSecOptions`
-- **Question:** Is this actually Fiserv ACH?
-- **Test merchant:** null
+**Input format:** `copilot_account` = slash-separated, newest first: `x / y / z`
+- `x` = newest merchant, `z` = oldest (OG/primary)
+- Add new IDs to the front — oldest stays at the end automatically
 
-### 2. Cash Discount (Flat Rate Pricing)
-
-- **CoPilot Field:** `pricing.flatPricing`
-- **Can extract:** Yes/No
-- **Issue:** No HubSpot field yet
-
-### 3. PCI Non Compliance
-
-- **CoPilot Fields:** `fees.pciProgramCd`, `fees.pciAnnualFee`
-- **Question:** What indicates non-compliance?
-- **Issue:** No HubSpot field yet
+**Field precedence:**
+- Personal fields (name, email, phone, DOB) → **OG** merchant
+- Address fields (address, city, state, zip) → **newest** merchant
+- Company / MID → slash-separated newest→oldest
+- Volume → **sum** across all merchants → range
+- Industry, Pricing Type, Point of Sale → **merged** across all merchants
 
 ---
 
-## 📋 Multi-Business (Multiple CoPilot IDs per Contact)
+## 🔄 Sync Scripts
 
-**Supported input formats:**
-1. `copilot_account` – slash-separated: `168407650 / 168406070 / 168407620`
-2. `copilot_account_1`, `copilot_account_2`, … `copilot_account_6` – numbered fields
+### `sync_initial_setup.py`
+- Status-blind: always sets deal stage to "Interested", contact status to "Potential Merchant"
+- Use for: initial setup, testing
 
-**Order:** Last entry = primary (shared fields). Add new at front: `new / x / y / z` so primary stays.
-
-**Flow:**
-- For each CoPilot ID: fetch merchant, create/update deal
-- Contact shared fields (name, address, etc.) from first business
-- For 2+ businesses: numbered fields `customer_id_1`, `merchant_id_1`, `company_1`, etc.
-
-**Multi-business fields:**
-- `company` = slash-separated: "Preston A / Preston B / Preston C"
-- `merchant_id` = first business
-- `monthly_processing_volume` = **sum** of all businesses → range
+### `sync_with_status.py`
+- Status-aware: sets deal stage from CoPilot boarding status, sets `Current Merchant` + `CardChamp` on LIVE
+- Use for: ongoing/daily sync
 
 ---
 
-## ✅ Contact Status Logic
+## 🏷 Contact Status Logic
 
-**Field:** `status_2__cloned_` (HubSpot Contact "Status" field)
+**Field:** `status_2__cloned_`
 
-**Initial Setup:**
+| CoPilot Status | Action |
+|---|---|
+| Initial setup | Add `Potential Merchant` (preserve others) |
+| LIVE | Add `Current Merchant` (preserve others) |
+| Other | No change |
 
-- Sets to "Potential Merchant"
-
-**Status-Aware Sync:**
-
-- LIVE → "Current Merchant"
-- Other → no change
+Existing checkboxes (e.g. Sales Agent, Brand Ambassador) are always preserved.
 
 ---
 
-## 📊 Output Format
+## 📦 Point of Sale / Gateway (`point_of_sale`)
 
-All scripts show:
+**Source:** `GET /order/list` per merchant → `equipmentCatalog` → HubSpot rules
 
-- Raw CoPilot data (including empty/null fields)
-- HubSpot before values
-- What we're sending to HubSpot
-- What changed (NEW/CHANGED)
+**Gateway rule (per merchant):**
+- Only gateway orders → map to `CardPointe Virtual Terminal`
+- Gateway + other equipment → **drop** gateway; map only terminals/other hardware
+- Multi-merchant: rule runs per merchant, results merged (semicolon-joined values)
 
+**Matching:** Ordered rule table in `field_mappings._hubspot_pos_rules()`. Loads HubSpot option schema to validate values. Extend rules as new CoPilot catalog strings are seen.
+
+---
+
+## 📅 Date Fields
+
+| HubSpot Field | Source | Notes |
+|---|---|---|
+| `date_boarded` (contact) | `merchantStatus.boardedDatetime` | OG merchant |
+| `live_date` (contact) | `merchantStatus.liveDatetime` | OG merchant |
+| `closedate` (deal) | HubSpot automatic | Set by HubSpot when deal stage moves to Live/closed |
+| Deal stage → Boarded | `merchantStatus.boardedDatetime` | Stage logic handles this automatically |
+
+---
+
+## ⚠️ Known Gaps / Pending
+
+| Item | Status |
+|---|---|
+| ACH Provider | Paused |
+| PCI Compliance | Paused — need client's compliance logic |
+| MTD / YTD Volume | Paused — not in CoPilot endpoint |
+| Last Date Deposit | Blocked — no CoPilot source found |
+| Sales Code → Contact/Deal Owner | Blocked — needs HubSpot property + hierarchy clarification |
+| Production Credentials ticket → POS | Blocked — no ticket API |
+| HubSpot email workflow on Live | Client task — configure in HubSpot automation |

@@ -30,6 +30,15 @@ STATE_CODE_TO_NAME = {
 # Business-specific fields (excluded when using numbered properties for multi-business)
 BUSINESS_SPECIFIC_FIELDS = {"company", "merchant_id", "monthly_processing_volume"}
 
+# HubSpot ``point_of_sale`` catch-all when no 1:1 rule matches (add these options in the portal).
+_POINT_OF_SALE_OTHER_LABELS = (
+    "Other",
+    "Other / Software - Not Listed",
+    "Software - Not Listed",
+)
+# Last resort if the portal has not added an Other-style option yet (legacy).
+_POINT_OF_SALE_LEGACY_FALLBACK = ("POS System",)
+
 
 def point_of_sale_from_equipment_text(equipment_str: str):
     """Map equipment / order product text to a canonical POS label (for HubSpot matching)."""
@@ -52,8 +61,13 @@ def _hubspot_pos_rules():
         return t != "GATEWAY"
 
     return [
-        # (hubspot_option_label, predicate) — order matters
-        ("CardPointe Virtual Terminal", lambda s, r, t: gw(t) and "cardpointe" in s),
+        # (hubspot_option_label, predicate) — order matters; first match wins (1:1). Unmatched → Other.
+        (
+            "CardPointe Virtual Terminal",
+            lambda s, r, t: "cardpointe" in s
+            and "gateway" in s
+            and "integrated terminal" not in s,
+        ),
         ("Payeezy Gateway", lambda s, r, t: gw(t) and "payeezy" in s),
         ("Authorize.net", lambda s, r, t: gw(t) and "authorize" in s),
         ("Paytrace Gateway", lambda s, r, t: gw(t) and "paytrace" in s),
@@ -69,7 +83,6 @@ def _hubspot_pos_rules():
         ("Paymetric", lambda s, r, t: gw(t) and "paymetric" in s),
         ("Payjunction", lambda s, r, t: gw(t) and "payjunction" in s),
         ("AcceptBlue", lambda s, r, t: gw(t) and "acceptblue" in s),
-        ("POS System", lambda s, r, t: gw(t)),
         ("Clover Flex 4", lambda s, r, t: not_gw(t) and ("flex 4" in s or "flex4" in s) and ("clover" in s or "cardpointe" in s)),
         ("Clover Mini 3", lambda s, r, t: not_gw(t) and ("mini 3" in s or "mini3" in s) and ("clover" in s or "cardpointe" in s)),
         ("Mini 3 - CardPointe Integrated Terminal (US)", lambda s, r, t: not_gw(t) and "mini 3 - cardpointe" in s),
@@ -150,7 +163,11 @@ def _get_hubspot_pos_rules():
 
 def logical_pos_label_for_equipment(equipment_name: str, equipment_type_cd: str = "") -> str:
     """
-    Map catalog line → HubSpot ``point_of_sale`` option label (best effort).
+    Map catalog line → HubSpot ``point_of_sale`` option label (1:1 rules only).
+
+    If no rule matches, returns **Other** (resolved to the portal option via
+    ``_resolve_point_of_sale_other_value`` in the multiselect builder — not guessed into
+    random gateway buckets).
     """
     raw = equipment_name or ""
     s = raw.lower()
@@ -161,39 +178,16 @@ def logical_pos_label_for_equipment(equipment_name: str, equipment_type_cd: str 
                 return label
         except Exception:
             continue
-    if t == "GATEWAY" or "gateway" in s:
-        return "POS System"
-    return "POS System"
+    return "Other"
 
 
 def _pos_match_candidates_for_line(equipment_name: str, equipment_type_cd: str) -> list:
     """
-    Ordered strings to try against HubSpot (exact label match first in matcher).
+    Single primary label from 1:1 rules (or **Other**). Matcher uses **exact** HubSpot
+    option label/value only — no fuzzy collision across thousands of gateways.
     """
     primary = logical_pos_label_for_equipment(equipment_name, equipment_type_cd)
-    s = (equipment_name or "").lower()
-    t = (equipment_type_cd or "").upper()
-    out = []
-
-    if t == "GATEWAY" or ("gateway" in s and "cardpointe" in s):
-        # Primary first so exact match wins (API + "cardpointe" tokens otherwise steal gateway rows)
-        out.append(primary)
-        out.extend(["CardPointe Virtual Terminal", "CardPointe API", "POS System"])
-    elif t != "GATEWAY":
-        out.append(primary)
-    out.append("Other")
-    out.append("Software - Not Listed")
-    # De-dupe preserving order
-    seen = set()
-    uniq = []
-    for x in out:
-        if not x:
-            continue
-        k = x.lower()
-        if k not in seen:
-            seen.add(k)
-            uniq.append(x)
-    return uniq
+    return [primary] if primary else []
 
 
 def _hubspot_option_rows(property_definition: Optional[dict]) -> list:
@@ -212,6 +206,32 @@ def _hubspot_option_rows(property_definition: Optional[dict]) -> list:
     return rows
 
 
+def _resolve_point_of_sale_other_value(property_definition: Optional[dict]) -> Optional[str]:
+    """
+    HubSpot option **value** for the catch-all bucket when CoPilot text has no 1:1 rule.
+
+    Tries labels in order; add **Other** (or ``Other / Software - Not Listed``) to the
+    ``point_of_sale`` property in HubSpot so ops can refine options over time.
+    """
+    prefer = _POINT_OF_SALE_OTHER_LABELS + _POINT_OF_SALE_LEGACY_FALLBACK
+    hub_rows = _hubspot_option_rows(property_definition)
+    if not hub_rows:
+        return prefer[0]
+
+    def pick_value(row):
+        return row["value"] or row["label"]
+
+    for lbl in prefer:
+        c = lbl.strip().lower()
+        for row in hub_rows:
+            if row["label_l"] == c or row["value_l"] == c:
+                return pick_value(row)
+        for row in hub_rows:
+            if c in row["label_l"] or row["label_l"] in c:
+                return pick_value(row)
+    return pick_value(hub_rows[0]) if hub_rows else prefer[0]
+
+
 def match_candidates_to_hubspot_option_value(
     candidates: list,
     property_definition: Optional[dict],
@@ -219,15 +239,20 @@ def match_candidates_to_hubspot_option_value(
     equipment_is_gateway: bool = False,
 ) -> Optional[str]:
     """
-    Pick HubSpot enumeration **value** for PATCH (multi-select uses same values, semicolon-joined).
+    Pick HubSpot enumeration **value** for PATCH (multi-select uses values, semicolon-joined).
 
-    For **gateway** hardware, token overlap is restricted to options whose label/value
-    contains \"gateway\" (or POS System fallback) so \"CardPointe\" alone cannot map to
-    Virtual Terminal.
+    **Exact label/value match only** for each candidate — avoids accidentally mapping
+    unknown gateways into the wrong checkbox. Callers should send **Other** when rules
+    do not match; if the portal has no matching option, use
+    ``_resolve_point_of_sale_other_value``.
+
+    ``equipment_is_gateway`` is kept for call-site compatibility; matching no longer
+    uses gateway-specific fuzzy logic.
     """
+    _ = equipment_is_gateway
     rows = _hubspot_option_rows(property_definition)
     if not rows:
-        return (candidates[0] if candidates else None)  # no schema: use label as value
+        return (candidates[0] if candidates else None)
 
     def pick_value(row):
         return row["value"] or row["label"]
@@ -239,45 +264,6 @@ def match_candidates_to_hubspot_option_value(
         for row in rows:
             if row["label_l"] == c or row["value_l"] == c:
                 return pick_value(row)
-    for cand in candidates:
-        c = cand.strip().lower()
-        for row in rows:
-            if c in row["label_l"] or row["label_l"] in c:
-                return pick_value(row)
-    # Token overlap — gateway SKUs only compete among gateway-ish options
-    token_rows = rows
-    if equipment_is_gateway:
-        gw_rows = [
-            r
-            for r in rows
-            if "gateway" in r["label_l"]
-            or "gateway" in r["value_l"]
-            or "rapidconnect" in r["label_l"]
-        ]
-        if gw_rows:
-            token_rows = gw_rows
-        else:
-            ps = [r for r in rows if "pos system" in r["label_l"]]
-            token_rows = ps if ps else rows
-
-    for cand in candidates:
-        cw = set(re.findall(r"[a-z0-9]+", cand.lower()))
-        best_v, best_n = None, 0
-        for row in token_rows:
-            hw = set(re.findall(r"[a-z0-9]+", row["label_l"]))
-            n = len(cw & hw)
-            if n > best_n:
-                best_n = n
-                best_v = pick_value(row)
-        if best_n >= 1 and best_v:
-            return best_v
-    if equipment_is_gateway:
-        for row in rows:
-            if "pos system" in row["label_l"]:
-                return pick_value(row)
-    for row in rows:
-        if "pos system" in row["label_l"] or row["label_l"] in ("other", "unknown"):
-            return pick_value(row)
     return None
 
 
@@ -418,11 +404,7 @@ def build_point_of_sale_multiselect_value(
             candidates, point_of_sale_property_definition, equipment_is_gateway=is_gw
         )
         if not v:
-            v = match_candidates_to_hubspot_option_value(
-                [logical_pos_label_for_equipment(name, typ), "POS System"],
-                point_of_sale_property_definition,
-                equipment_is_gateway=is_gw,
-            )
+            v = _resolve_point_of_sale_other_value(point_of_sale_property_definition)
         if v and v not in seen_vals:
             seen_vals.add(v)
             hubspot_values.append(v)
@@ -726,8 +708,9 @@ def map_copilot_to_hubspot(
     if backend_mid:
         updates['merchant_id'] = str(backend_mid)
     
-    # ACH / E-Check Provider (paused)
-    
+    # ACH Provider → HubSpot ``ach_provider``: see ``get_ach_provider_hubspot_value`` in sync scripts
+    # Contact / deal owner ``hubspot_owner_id``: resolved in sync from ``sales_code_owner_map.csv`` (or JSON) via ``sales_code_owners``.
+
     # ========== PERSONAL INFO ==========
     
     # Date of Birth - Convert to proper format if needed
@@ -840,44 +823,89 @@ def get_pricing_type(merchant_data):
     return None
 
 
-def check_ach_enabled(merchant_data):
-    """Check if ACH is enabled"""
-    processing = merchant_data.get("merchant", {}).get("processing", {})
-    ach_options = processing.get("blueChexSecOptions", {})
-    
-    if not ach_options:
+def _truthy_bluechex_flag(value) -> bool:
+    """CoPilot sometimes returns booleans; treat common string/number sentinels as on."""
+    if value is True:
+        return True
+    if value in (False, None, "", 0, 0.0):
         return False
-    
-    # Check if any ACH option is enabled
-    return any(ach_options.values())
+    if isinstance(value, str) and value.strip().upper() in ("Y", "YES", "TRUE", "1", "ON"):
+        return True
+    if isinstance(value, (int, float)) and value != 0:
+        return True
+    return bool(value)
+
+
+def check_ach_enabled(merchant_data: dict) -> bool:
+    """
+    Infer whether ACH (BlueChex / “ACH from Fiserv”) is in use for this merchant.
+
+    CoPilot generally **omits** ``processing.blueChexSecOptions`` and
+    ``processing.blueChexSecVolume`` when ACH is not set up; when either appears with
+    real content, we treat that as a reliable proxy for ACH being enabled.
+
+    Signals (first match wins):
+    - ``blueChexSecOptions``: non-empty dict and at least one flag is truthy, **or**
+      non-empty dict with keys (enrollment/toggles present even if currently false).
+    - ``blueChexSecVolume``: non-empty list/tuple, or non-empty dict (volume / activity rows).
+
+    Missing keys, ``null``, or ``{}`` / empty collections → not enabled.
+    """
+    processing = merchant_data.get("merchant", {}).get("processing")
+    if not isinstance(processing, dict):
+        return False
+
+    opts = processing.get("blueChexSecOptions")
+    if isinstance(opts, dict) and opts:
+        if any(_truthy_bluechex_flag(v) for v in opts.values()):
+            return True
+        # Non-empty options object (toggles / enrollment) but all flags off — still on ACH product
+        return True
+    elif opts is not None and not isinstance(opts, dict) and bool(opts):
+        return True
+
+    vol = processing.get("blueChexSecVolume")
+    if isinstance(vol, (list, tuple)) and len(vol) > 0:
+        return True
+    if isinstance(vol, dict) and len(vol) > 0:
+        return True
+
+    return False
+
+
+def get_ach_provider_hubspot_value(
+    merchant_data_list: list,
+    property_definition: Optional[dict] = None,
+) -> Optional[str]:
+    """
+    Value for HubSpot single-select ``ach_provider`` when BlueChex ACH is inferred.
+
+    CSV rule: if ACH from Fiserv is enabled → option **Fiserv ACH**.
+    Uses property definition option ``value`` when it matches the label.
+    """
+    if not merchant_data_list:
+        return None
+    if not any(check_ach_enabled(md) for md in merchant_data_list):
+        return None
+    v = _option_value_for_label("Fiserv ACH", property_definition)
+    return v if v else "Fiserv ACH"
 
 
 def get_copilot_accounts_from_contact(contact_props):
     """
-    Get list of CoPilot Account IDs from HubSpot contact.
-    Supports: copilot_account (slash-separated), copilot_account_1..6 (numbered).
-    
-    Format: "x / y / z" where x=newest and z=oldest (OG/primary personal profile).
-    New IDs are added to the front, so the oldest remains at the end.
-    
-    Returns list with LAST entry first (oldest/OG first for processing).
+    Parse CoPilot merchant IDs from HubSpot ``copilot_account`` only (single property).
+
+    Format: ``x / y / z`` where **x = newest**, **z = oldest (OG)**. Split on ``/`` (spaces optional).
+    Returns IDs with **oldest first** for processing (OG personal fields, etc.).
     """
     ids = []
-    # Single field: slash-separated
-    single = contact_props.get("copilot_account", "").strip()
-    if single:
-        for part in re.split(r"\s*/\s*", single):
-            part = part.strip()
-            if part:
-                ids.append(part)
-        if ids:
-            ids.reverse()  # Last in input = first/primary
-            return ids
-    # Numbered fields: highest index is primary
-    for i in range(1, 7):
-        val = contact_props.get(f"copilot_account_{i}", "").strip()
-        if val:
-            ids.append(val)
+    single = (contact_props.get("copilot_account") or "").strip()
+    if not single:
+        return ids
+    for part in re.split(r"\s*/\s*", single):
+        part = part.strip()
+        if part:
+            ids.append(part)
     ids.reverse()
     return ids
 

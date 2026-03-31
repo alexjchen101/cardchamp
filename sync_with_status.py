@@ -6,16 +6,14 @@ Checks CoPilot status and updates HubSpot accordingly:
 - Detects boarding status (Interested / Contract Sent / Boarded)
 - Updates deal stage to match reality
 - Updates all contact fields
-- Sets lifecycle stage if boarded ("Customer")
 - Sets current processor if boarded ("CardChamp") or cancelled (blank)
 
 This is the "production" sync that should run regularly (daily/hourly).
 
 Usage:
-    python3 sync_with_status.py <copilot_account_number> [contact_email]
-    
-Example:
-    python3 sync_with_status.py 170761464 test@test.com
+    python3 sync_with_status.py <contact_email>
+
+CoPilot IDs are read from the contact property ``copilot_account`` (slash-separated if several).
 """
 
 import sys
@@ -31,6 +29,7 @@ from field_mappings import (
     extract_address_updates_from_merchant_data,
     get_copilot_accounts_from_contact,
     get_company_names_slash_separated,
+    get_ach_provider_hubspot_value,
     merge_multiselect_values,
     remove_multiselect_options,
     extract_deal_amount,
@@ -42,6 +41,7 @@ from status_logic import (
     get_status,
     get_current_processor,
 )
+from sales_code_owners import hubspot_owner_id_for_sales_code
 
 
 def _copilot_datetime_to_hubspot_millis(dt_str):
@@ -78,7 +78,7 @@ def sync_with_status(contact_email):
             return False
         
         contact_id = search_results["results"][0]["id"]
-        copilot_props = ["copilot_account"] + [f"copilot_account_{i}" for i in range(1, 7)]
+        copilot_props = ["copilot_account"]
         contact = hubspot.get_contact(contact_id, properties=copilot_props)
         contact_props = contact.get("properties", {})
         copilot_ids = get_copilot_accounts_from_contact(contact_props)
@@ -102,6 +102,7 @@ def sync_with_status(contact_email):
             "state", "zip", "city", "address", "website", "platform",
             "monthly_processing_volume", "merchant_id", "date_of_birth", "status_2__cloned_",
             "pricing_type", "date_boarded", "live_date", "sales_code", "industry_mcc",
+            "ach_provider",
         ])
         current_props = contact.get("properties", {})
     except Exception as e:
@@ -119,6 +120,7 @@ def sync_with_status(contact_email):
     order_list_primary = None
     
     deal_prop_names = hubspot.get_deal_property_names()
+    mapped_owner_from_sales_code = None
 
     for idx, copilot_id in enumerate(copilot_ids, 1):
         print(f"\n2.{idx}. Fetching CoPilot data for {copilot_id}...")
@@ -139,6 +141,10 @@ def sync_with_status(contact_email):
                 first_merchant_data = merchant_data
                 first_status_data = status_data
                 first_signature_data = signature_data
+                mapped_owner_from_sales_code = hubspot_owner_id_for_sales_code(
+                    extract_sales_code(first_merchant_data),
+                    hubspot,
+                )
                 try:
                     order_list_primary = copilot.list_orders(copilot_id, page_size=100, page_number=1)
                 except Exception as e:
@@ -161,7 +167,9 @@ def sync_with_status(contact_email):
             
             if matching_deal:
                 deal_id = matching_deal.get('id')
-                current_stage = matching_deal.get('properties', {}).get('dealstage')
+                deal_props_existing = matching_deal.get("properties", {})
+                current_stage = deal_props_existing.get('dealstage')
+                current_deal_owner = deal_props_existing.get("hubspot_owner_id")
                 deal_updates = {"dealstage": stage_id}
                 deal_amount = extract_deal_amount(merchant_data)
                 if deal_amount and stage_num >= 6:
@@ -169,14 +177,22 @@ def sync_with_status(contact_email):
                 dsc = extract_sales_code(merchant_data)
                 if dsc and "sales_code" in deal_prop_names:
                     deal_updates["sales_code"] = dsc
-                if current_stage != stage_id or (deal_amount and stage_num >= 6) or (
-                    dsc and "sales_code" in deal_prop_names
+                if mapped_owner_from_sales_code and str(current_deal_owner or "") != str(
+                    mapped_owner_from_sales_code
                 ):
+                    deal_updates["hubspot_owner_id"] = mapped_owner_from_sales_code
+                should_patch_deal = (
+                    current_stage != stage_id
+                    or (deal_amount and stage_num >= 6)
+                    or (dsc and "sales_code" in deal_prop_names)
+                    or "hubspot_owner_id" in deal_updates
+                )
+                if should_patch_deal:
                     hubspot._request("PATCH", f"/crm/v3/objects/deals/{deal_id}", {"properties": deal_updates})
                     print(f"   ✓ Deal updated: {deal_name} → {stage_name}")
             else:
                 deal_amount = extract_deal_amount(merchant_data)
-                owner_id = current_props.get("hubspot_owner_id")
+                owner_id = mapped_owner_from_sales_code or current_props.get("hubspot_owner_id")
                 deal_props = {"dealname": deal_name, "dealstage": stage_id}
                 if deal_amount:
                     deal_props["amount"] = str(deal_amount)
@@ -256,6 +272,11 @@ def sync_with_status(contact_email):
         pricing_def = hubspot.get_contact_property_definition("pricing_type")
     except Exception:
         pass
+    ach_def = None
+    try:
+        ach_def = hubspot.get_contact_property_definition("ach_provider")
+    except Exception:
+        pass
 
     hubspot_updates = map_copilot_to_hubspot(
         first_merchant_data,
@@ -300,7 +321,12 @@ def sync_with_status(contact_email):
     pricing_multi = build_pricing_type_multiselect_value(all_merchant_data, pricing_def)
     if pricing_multi:
         hubspot_updates["pricing_type"] = pricing_multi
-    
+
+    ach_hub = get_ach_provider_hubspot_value(all_merchant_data, ach_def)
+    if ach_hub:
+        hubspot_updates["ach_provider"] = ach_hub
+        print(f"   ✓ ach_provider (BlueChex): {ach_hub}")
+
     # Date Boarded / Live Date from CoPilot status (oldest/primary merchant)
     if first_status_data:
         merchant_status = first_status_data.get("merchantStatus", {})
@@ -315,7 +341,10 @@ def sync_with_status(contact_email):
     og_sales = extract_sales_code(first_merchant_data) if first_merchant_data else None
     if og_sales:
         hubspot_updates["sales_code"] = og_sales
-    
+    if mapped_owner_from_sales_code:
+        hubspot_updates["hubspot_owner_id"] = mapped_owner_from_sales_code
+        print(f"   ✓ hubspot_owner_id (sales_code → owner map): {mapped_owner_from_sales_code}")
+
     # Add status-driven fields (preserve existing multi-checkbox selections)
     any_live = any(
         (sd.get("merchantStatus", {}).get("boardingProcessStatusCd") == "LIVE")

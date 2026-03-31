@@ -104,15 +104,12 @@ class HubSpotClient:
         
         return self._request("POST", "/crm/v3/objects/contacts/search", payload)
     
-    def search_contacts_with_copilot_id(self, property_name: str = "copilot_account_number") -> list:
+    def search_contacts_with_copilot_id(self, property_name: str = "copilot_account") -> list:
         """
-        Search for all contacts that have a CoPilot Account Number.
-        
-        Args:
-            property_name: Name of the custom property storing CoPilot Account #
-            
-        Returns:
-            list: List of contact records with CoPilot Account Numbers
+        First page of contacts where the CoPilot field is set (default: ``copilot_account``).
+
+        HubSpot returns at most ``limit`` rows; use ``paging.next.after`` to fetch more
+        for a full tenant sync.
         """
         payload = {
             "filterGroups": [{
@@ -276,7 +273,8 @@ class HubSpotClient:
             deal_id = assoc.get("toObjectId")
             if deal_id:
                 try:
-                    deal = self._request("GET", f"/crm/v3/objects/deals/{deal_id}", {"properties": "dealname,dealstage,amount"})
+                    props = "dealname,dealstage,amount,hubspot_owner_id,sales_code"
+                    deal = self._request("GET", f"/crm/v3/objects/deals/{deal_id}?properties={props}")
                     deals.append(deal)
                 except Exception:
                     # Skip if deal can't be fetched
@@ -304,6 +302,15 @@ class HubSpotClient:
         }]
         
         return self._request("PUT", endpoint, payload)
+    
+    def list_owners(self, limit: int = 500) -> list:
+        """
+        CRM users (owners). Each ``id`` is valid for ``hubspot_owner_id`` on contacts/deals.
+
+        Paginated; increase limit or add paging if you have many users.
+        """
+        response = self._request("GET", f"/crm/v3/owners?limit={limit}")
+        return response.get("results", [])
     
     # =========================================================================
     # PIPELINE & STAGE OPERATIONS

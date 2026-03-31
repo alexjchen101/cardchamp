@@ -11,10 +11,9 @@ Use this for:
 - When you don't want status to affect deal stage yet
 
 Usage:
-    python3 sync_initial_setup.py <copilot_account_number> [contact_email]
-    
-Example:
-    python3 sync_initial_setup.py 170761464 test@test.com
+    python3 sync_initial_setup.py <contact_email>
+
+CoPilot IDs are read from the contact property ``copilot_account`` (slash-separated if several).
 """
 
 import sys
@@ -30,11 +29,14 @@ from field_mappings import (
     extract_address_updates_from_merchant_data,
     get_copilot_accounts_from_contact,
     get_company_names_slash_separated,
+    get_ach_provider_hubspot_value,
     merge_multiselect_values,
     extract_deal_amount,
     extract_sales_code,
     volume_to_range,
 )
+
+from sales_code_owners import hubspot_owner_id_for_sales_code
 
 # Deal stage (always "Interested" for initial setup)
 STAGE_INTERESTED = "qualifiedtobuy"
@@ -75,7 +77,7 @@ def sync_initial_setup(contact_email):
             return False
         
         contact_id = search_results["results"][0]["id"]
-        copilot_props = ["copilot_account"] + [f"copilot_account_{i}" for i in range(1, 7)]
+        copilot_props = ["copilot_account"]
         contact = hubspot.get_contact(contact_id, properties=copilot_props)
         contact_props = contact.get("properties", {})
         copilot_ids = get_copilot_accounts_from_contact(contact_props)
@@ -99,6 +101,7 @@ def sync_initial_setup(contact_email):
             "state", "zip", "city", "address", "website", "platform",
             "monthly_processing_volume", "merchant_id", "date_of_birth",
             "pricing_type", "date_boarded", "live_date", "sales_code", "industry_mcc",
+            "ach_provider",
         ])
         current_props = contact.get("properties", {})
     except Exception as e:
@@ -114,6 +117,7 @@ def sync_initial_setup(contact_email):
     order_list_primary = None  # legacy fallback for map when no catalog orders
     
     deal_prop_names = hubspot.get_deal_property_names()
+    mapped_owner_from_sales_code = None
 
     for idx, copilot_id in enumerate(copilot_ids, 1):
         print(f"\n3.{idx}. Fetching CoPilot data for {copilot_id}...")
@@ -124,6 +128,10 @@ def sync_initial_setup(contact_email):
             
             if idx == 1:
                 first_merchant_data = merchant_data
+                mapped_owner_from_sales_code = hubspot_owner_id_for_sales_code(
+                    extract_sales_code(first_merchant_data),
+                    hubspot,
+                )
                 try:
                     first_status_data = copilot.get_status(copilot_id)
                 except Exception as e:
@@ -216,6 +224,11 @@ def sync_initial_setup(contact_email):
         pricing_def = hubspot.get_contact_property_definition("pricing_type")
     except Exception:
         pass
+    ach_def = None
+    try:
+        ach_def = hubspot.get_contact_property_definition("ach_provider")
+    except Exception:
+        pass
 
     hubspot_updates = map_copilot_to_hubspot(
         first_merchant_data,
@@ -260,7 +273,12 @@ def sync_initial_setup(contact_email):
     pricing_multi = build_pricing_type_multiselect_value(all_merchant_data, pricing_def)
     if pricing_multi:
         hubspot_updates["pricing_type"] = pricing_multi
-    
+
+    ach_hub = get_ach_provider_hubspot_value(all_merchant_data, ach_def)
+    if ach_hub:
+        hubspot_updates["ach_provider"] = ach_hub
+        print(f"   ✓ ach_provider (BlueChex): {ach_hub}")
+
     # Date Boarded / Live Date from CoPilot status (oldest/primary merchant)
     if first_status_data:
         merchant_status = first_status_data.get("merchantStatus", {})
@@ -274,7 +292,10 @@ def sync_initial_setup(contact_email):
     og_sales = extract_sales_code(first_merchant_data) if first_merchant_data else None
     if og_sales:
         hubspot_updates["sales_code"] = og_sales
-    
+    if mapped_owner_from_sales_code:
+        hubspot_updates["hubspot_owner_id"] = mapped_owner_from_sales_code
+        print(f"   ✓ hubspot_owner_id (sales_code → owner map): {mapped_owner_from_sales_code}")
+
     # Initial setup: add Potential Merchant while preserving other checkbox statuses
     hubspot_updates["status_2__cloned_"] = merge_multiselect_values(
         current_props.get("status_2__cloned_", ""),

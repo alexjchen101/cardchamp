@@ -59,9 +59,9 @@ def get_status(status_data, is_initial_setup=False):
     
     Logic:
     - Initial setup → "Potential Merchant"
-    - LIVE → "Current Merchant"
+    - LIVE / BOARDED → "Current Merchant" (HubSpot label: Customer)
+    - Other active pre-live statuses → "Potential Merchant"
     - CANCELLED → None (manual update required)
-    - Other → None (don't update)
     
     Args:
         status_data: Status response from CoPilot API
@@ -75,12 +75,16 @@ def get_status(status_data, is_initial_setup=False):
     
     merchant_status = status_data.get("merchantStatus", {})
     boarding_status = merchant_status.get("boardingProcessStatusCd", "")
-    
-    if boarding_status == "LIVE":
+    gateway_boarding = merchant_status.get("gatewayBoardingStatusCd", "")
+    cancelled_datetime = merchant_status.get("cancelledDatetime")
+
+    if cancelled_datetime is not None:
+        return None
+
+    if boarding_status == "LIVE" or gateway_boarding == "BOARDED":
         return "Current Merchant"
-    
-    # Don't override for other statuses (including CANCELLED)
-    return None
+
+    return "Potential Merchant"
 
 
 def get_current_processor(status_data):

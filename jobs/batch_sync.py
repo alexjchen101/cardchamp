@@ -1,0 +1,100 @@
+#!/usr/bin/env python3
+"""
+Batch runner for daily CoPilot -> HubSpot sync.
+
+Modes:
+- allowlist: sync contact emails listed in ``config/live_allowlist.txt``
+- all: sync every HubSpot contact with ``copilot_account``
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from hubspot.client import HubSpotClient
+from jobs.sync_with_status import sync_with_status
+
+DEFAULT_ALLOWLIST = ROOT / "config" / "live_allowlist.txt"
+
+
+def _load_allowlist(path: Path) -> list[str]:
+    emails = []
+    if not path.is_file():
+        return emails
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        emails.append(line)
+    return emails
+
+
+def _emails_from_hubspot_with_copilot() -> list[str]:
+    client = HubSpotClient()
+    emails = []
+    seen = set()
+    for row in client.iter_contacts_with_property("copilot_account"):
+        props = row.get("properties", {}) or {}
+        email = (props.get("email") or "").strip()
+        if not email or email in seen:
+            continue
+        seen.add(email)
+        emails.append(email)
+    return emails
+
+
+def _run_batch(emails: list[str]) -> int:
+    total = len(emails)
+    ok = 0
+    failed = 0
+    for idx, email in enumerate(emails, 1):
+        print(f"\n[{idx}/{total}] Syncing {email}")
+        success = sync_with_status(email)
+        if success:
+            ok += 1
+        else:
+            failed += 1
+    print("\n" + "=" * 60)
+    print("BATCH SYNC SUMMARY")
+    print("=" * 60)
+    print(f"Total: {total}")
+    print(f"Succeeded: {ok}")
+    print(f"Failed: {failed}")
+    print("=" * 60)
+    return 0 if failed == 0 else 1
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Run batch CoPilot -> HubSpot sync")
+    parser.add_argument(
+        "--mode",
+        choices=("allowlist", "all"),
+        default="allowlist",
+        help="allowlist = config file; all = every HubSpot contact with copilot_account",
+    )
+    parser.add_argument(
+        "--allowlist-file",
+        default=str(DEFAULT_ALLOWLIST),
+        help="Path to allowlist file for allowlist mode",
+    )
+    args = parser.parse_args()
+
+    if args.mode == "all":
+        emails = _emails_from_hubspot_with_copilot()
+    else:
+        emails = _load_allowlist(Path(args.allowlist_file))
+
+    if not emails:
+        print("No contacts to sync.")
+        return 0
+
+    return _run_batch(emails)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

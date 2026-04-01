@@ -32,6 +32,7 @@ class HubSpotClient:
         """Initialize HubSpot client with access token from .env"""
         self.access_token = os.getenv("HUBSPOT_ACCESS_TOKEN")
         self.base_url = "https://api.hubapi.com"
+        self.timeout_seconds = float(os.getenv("HUBSPOT_TIMEOUT_SECONDS", "30"))
         
         if not self.access_token:
             raise ValueError("HUBSPOT_ACCESS_TOKEN not found in .env file")
@@ -65,7 +66,8 @@ class HubSpotClient:
             method=method,
             url=url,
             headers=headers,
-            json=data
+            json=data,
+            timeout=self.timeout_seconds,
         )
         
         if response.status_code >= 400:
@@ -127,6 +129,35 @@ class HubSpotClient:
         
         response = self._request("POST", "/crm/v3/objects/contacts/search", payload)
         return response.get("results", [])
+
+    def iter_contacts_with_property(self, property_name: str = "copilot_account", limit: int = 100):
+        """
+        Yield all contacts where ``property_name`` is set, following HubSpot paging.
+        """
+        after = None
+        while True:
+            payload = {
+                "filterGroups": [{
+                    "filters": [{
+                        "propertyName": property_name,
+                        "operator": "HAS_PROPERTY"
+                    }]
+                }],
+                "properties": [
+                    "firstname", "lastname", "email", "phone", "mobilephone",
+                    property_name, "lifecyclestage"
+                ],
+                "limit": limit
+            }
+            if after is not None:
+                payload["after"] = after
+            response = self._request("POST", "/crm/v3/objects/contacts/search", payload)
+            results = response.get("results", [])
+            for row in results:
+                yield row
+            after = ((response.get("paging") or {}).get("next") or {}).get("after")
+            if not after:
+                break
     
     def get_contact(self, contact_id: str, properties: list = None) -> dict:
         """

@@ -1,94 +1,53 @@
-# CardChamp CoPilot → HubSpot Integration
+# CardChamp CoPilot -> HubSpot Integration
 
-Syncs merchant data from CoPilot (FiSurf) to HubSpot CRM.
+Sync merchant data from CoPilot to HubSpot CRM.
 
----
+## Run
 
-## 🚀 Run Now
+Production jobs:
 
 ```bash
-python3 sync_with_status.py test@test.com
+python3 jobs/sync_with_status.py test@test.com
 ```
 
-Script pulls CoPilot Account # from HubSpot automatically.
+Batch / daily sync:
 
-Simple output format:
-- COPILOT RAW DATA (everything pulled, empty = `(empty)` or `(null)`)
-- HUBSPOT BEFORE (current values)
-- SENDING TO HUBSPOT (what we're updating)
-- CHANGES (NEW or CHANGED only)
-
----
-
-## 📋 Two Scripts
-
-**sync_with_status.py** - Production (use this)
-- Detects CoPilot status → sets correct deal stage
-- Updates Contact Status/processor when LIVE
-- Syncs all 14 fields
-
-**sync_initial_setup.py** - Testing only
-- Sets Contact Status to "Potential Merchant"
-- Creates deal at "Interested" stage
-- Ignores CoPilot status
-
----
-
-## 📚 Docs
-
-- **`FIELD_MAPPING.md`** - All 14 syncing fields + transformations
-- **`NOTES.md`** - 3 uncertainties (ACH, Cash Discount, PCI)
-
----
-
-## 📊 Output Format
-
-**COPILOT RAW DATA:**
-```
-stateCd: PA
-backEndPlatformCd: FDNOB
-mccId: 8041
-averageMonthlyVolume: 30000
-equipment: (empty)
-blueChexSecOptions: (null)
+```bash
+python3 jobs/batch_sync.py --mode allowlist
+python3 jobs/batch_sync.py --mode all
 ```
 
-**SENDING TO HUBSPOT:**
-```
-state: Pennsylvania  (PA transformed)
-platform: North  (FDNOB transformed)
-industry: 8041 - Chiropractors  (8041 transformed)
-monthly_processing_volume: 20-50K  ($30K transformed)
+Manual tools / testing:
+
+```bash
+python3 tools/sync_initial_setup.py test@test.com
 ```
 
-**CHANGES:**
+Scripts pull CoPilot IDs from HubSpot `copilot_account`.
+
+## Layout
+
+```text
+jobs/sync_with_status.py       production sync for one contact
+jobs/batch_sync.py             batch runner for daily sync
+tools/sync_initial_setup.py    status-blind setup sync
+field_mappings.py              mapping + transforms
+status_logic.py                deal/status rules
+sales_code_owners.py           sales code -> HubSpot owner resolver
+data/CoPilot - HubSpot Data Flow - Sales Codes.csv raw client owner export
+data/sales_code_owner_map.csv  normalized owner mapping
+data/legacy/sales_code_owner_map.json legacy fallback mapping
+hubspot/client.py              HubSpot API client
+copilot/                       CoPilot API client
+tools/list_hubspot_owners.py   helper to list HubSpot owner ids
+tools/check_sales_code_owner_map.py validate sales code owner CSV
+tools/refresh_mcc_mapping.py   refresh MCC options from HubSpot
+config/live_allowlist.txt      starter allowlist for daily live sync
+docs/FIELD_MAPPING.md          source-of-truth field behavior
+docs/reference/                archived client/reference files
 ```
-NEW: platform = North
-CHANGED: state = '' → 'Pennsylvania'
-```
 
----
+## Docs
 
-## ✅ Working
-
-- 14 contact fields syncing
-- Status-aware deal progression (Interested → Contract Sent → Boarded)
-- Contact Status: "Potential Merchant" on initial → "Current Merchant" when LIVE
-- Current Processor: "CardChamp" when LIVE, blank when CANCELLED
-- Duplicate prevention
-- Shows ALL fields in output (including empty ones)
-
----
-
-## 📁 Files
-
-```
-sync_with_status.py    - Production sync (status-aware)
-sync_initial_setup.py  - Test sync (status-blind)
-status_logic.py        - Status detection
-field_mappings.py      - Data transformations
-mcc_mapping.py         - MCC → Industry mapping
-
-hubspot/client.py      - HubSpot API
-copilot/               - CoPilot API
-```
+- `docs/FIELD_MAPPING.md` is the source of truth for synced fields and behavior.
+- `docs/reference/CoPilot - HubSpot Data Flow - Field Mapping.csv` is the original client requirement sheet.

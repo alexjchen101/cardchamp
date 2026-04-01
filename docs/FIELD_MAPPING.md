@@ -26,9 +26,11 @@ No `copilot_account_1…6` — retired; use only `copilot_account`.
 | `merchant_id` | `backEndMid` | Multi: slash-separated newest→oldest |
 | `date_of_birth` | `ownership.ownerDob` | OG |
 | `pricing_type` | `merchant.pricing.*` | HubSpot values: Flat Rate, IC Plus, Swiped/Non-Swiped |
-| `point_of_sale` | Orders + `equipmentCatalog` + rules | Multi-select; **CardPointe Gateway** omitted if any other line on that merchant |
+| `point_of_sale` | Orders + `equipmentCatalog` + rules | Multi-select; explicit 1:1 rules first, unknowns go to `Other`; **CardPointe Gateway** omitted if any other line on that merchant |
+| `ach___e_check_provider` (`ACH Provider`) | `processing.blueChexSecOptions`, `processing.blueChexSecVolume` | If BlueChex / ACH From Fiserv is present, set to `Fiserv ACH`; otherwise leave blank |
 | `sales_code` | `merchant.salesCode` | OG contact; deal too if `sales_code` exists on deals |
-| `status_2__cloned_` | Boarding status | On LIVE: add `Current Merchant`, remove `Potential Merchant`; merge preserves other roles |
+| `hubspot_owner_id` | sales-code owner map | Contact owner comes from `data/CoPilot - HubSpot Data Flow - Sales Codes.csv`, `data/sales_code_owner_map.csv`, or `data/legacy/sales_code_owner_map.json` when a sales code match exists |
+| `status_2__cloned_` | Boarding status | Merchant lifecycle values are mutually exclusive: pre-live uses `Potential Merchant`, boarded/live uses `Current Merchant` (HubSpot label: Customer); preserve other roles |
 | `current_processor` | Status | `CardChamp` on LIVE; clear on cancel (`sync_with_status` only) potential |
 | `date_boarded`, `live_date` | `merchantStatus` (OG status payload) | Epoch ms / string |
 
@@ -40,16 +42,16 @@ One deal per CoPilot ID. Name: `{DBA} - {copilotId}`.
 |---------|--------|
 | `dealstage` | LIVE → Live; BOARDED → Boarded; signature SENT/PENDING/SIGNED → Contract Sent; else Interested |
 | `amount` | Approx. monthly volume when stage ≥ Contract Sent |
+| `hubspot_owner_id` | sales-code owner map / current contact owner fallback |
 | `closedate` | Not set by us — HubSpot default on closed-won |
 
-## Paused / blocked
+## Still unresolved
 
 | Item | Reason |
 |------|--------|
-| ACH, PCI, MTD/YTD, last deposit | Source or client rules TBD |
-| Sales code → owner | Hierarchy TBD |
+| PCI, MTD/YTD, last deposit | Source or client rules TBD |
 | Production Credentials ticket → POS | No ticket API |
 
 ## Client CSV
 
-See `CoPilot - HubSpot Data Flow - Field Mapping.csv` for original requirements.
+See `docs/reference/CoPilot - HubSpot Data Flow - Field Mapping.csv` for original requirements.

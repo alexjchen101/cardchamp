@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Verify each row in ``sales_code_owner_map.csv`` resolves to a HubSpot owner id.
+Verify each row in the active sales-code owner CSV resolves to a HubSpot owner id.
 
 Usage (repo root):
-    python3 scripts/check_sales_code_owner_map.py
+    python3 tools/check_sales_code_owner_map.py
 
 Requires: HUBSPOT_ACCESS_TOKEN in .env
 """

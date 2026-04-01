@@ -2,7 +2,11 @@
 Map CoPilot ``merchant.salesCode`` → HubSpot ``hubspot_owner_id`` (contact + deal owner).
 
 **Spreadsheet workflow (recommended)**  
-Export the client spreadsheet to CSV and save as ``sales_code_owner_map.csv`` in the repo root.
+Save either of these CSVs in ``data/``:
+
+  - ``data/CoPilot - HubSpot Data Flow - Sales Codes.csv`` (raw client export)
+  - ``data/sales_code_owner_map.csv`` (normalized internal format)
+
 Header row must include a sales-code column; include at least one owner column per row:
 
   - ``hubspot_owner_id`` (or ``owner_id``) — best: no API lookup
@@ -11,10 +15,11 @@ Header row must include a sales-code column; include at least one owner column p
     HubSpot owner first+last (case-insensitive, collapsed whitespace)
 
 **Legacy**  
-If ``sales_code_owner_map.csv`` is missing or has no data rows, ``sales_code_owner_map.json`` is used:
+If ``data/sales_code_owner_map.csv`` is missing or has no data rows,
+``data/legacy/sales_code_owner_map.json`` is used:
 ``{ "SALESCODE": "ownerId", ... }`` (case-insensitive keys).
 
-List HubSpot owners: ``python3 scripts/list_hubspot_owners.py`` (needs ``HUBSPOT_ACCESS_TOKEN``).
+List HubSpot owners: ``python3 tools/list_hubspot_owners.py`` (needs ``HUBSPOT_ACCESS_TOKEN``).
 """
 
 from __future__ import annotations
@@ -24,14 +29,16 @@ import json
 import re
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Callable, Optional, TYPE_CHECKING
+from typing import Any, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from hubspot.client import HubSpotClient
 
 _ROOT = Path(__file__).resolve().parent
-_CSV_PATH = _ROOT / "sales_code_owner_map.csv"
-_JSON_PATH = _ROOT / "sales_code_owner_map.json"
+_DATA_DIR = _ROOT / "data"
+_CSV_PATH = _DATA_DIR / "sales_code_owner_map.csv"
+_RAW_EXPORT_CSV_PATH = _DATA_DIR / "CoPilot - HubSpot Data Flow - Sales Codes.csv"
+_JSON_PATH = _DATA_DIR / "legacy" / "sales_code_owner_map.json"
 
 # Cached owner list from HubSpot (per process). Cleared on reload_sales_code_owner_map().
 _owners_cache: Optional[list] = None
@@ -69,7 +76,7 @@ def _normalize_csv_fieldnames(names: Optional[list[str]]) -> dict[str, str]:
     for raw in names:
         if raw is None:
             continue
-        key = re.sub(r"[\s\-]+", "_", raw.strip().lower())
+        key = re.sub(r"[^a-z0-9]+", "_", raw.strip().lower()).strip("_")
         out[key] = raw
     alias = {
         "sales_code": "sales_code",
@@ -78,6 +85,7 @@ def _normalize_csv_fieldnames(names: Optional[list[str]]) -> dict[str, str]:
         "code": "sales_code",
         "hubspot_owner_id": "hubspot_owner_id",
         "owner_id": "hubspot_owner_id",
+        "user_id": "hubspot_owner_id",
         "hubspot_id": "hubspot_owner_id",
         "hs_owner_id": "hubspot_owner_id",
         "owner_email": "owner_email",
@@ -87,7 +95,10 @@ def _normalize_csv_fieldnames(names: Optional[list[str]]) -> dict[str, str]:
         "rep_name": "owner_name",
         "name": "owner_name",
         "contact_owner": "owner_name",
+        "contact_owner_deal_stage_owner": "owner_name",
         "display_name": "owner_name",
+        "first_name": "first_name",
+        "last_name": "last_name",
     }
     canon: dict[str, str] = {}
     for k, orig in out.items():
@@ -102,6 +113,16 @@ def _cell(row: dict, canon: dict[str, str], key: str) -> str:
     if not h:
         return ""
     return str(row.get(h) or "").strip()
+
+
+def _row_owner_name(row: dict, canon: dict[str, str]) -> str:
+    owner_name = _cell(row, canon, "owner_name")
+    if owner_name:
+        return owner_name
+    first = _cell(row, canon, "first_name")
+    last = _cell(row, canon, "last_name")
+    combined = " ".join(part for part in (first, last) if part).strip()
+    return combined
 
 
 def _read_json_fallback() -> dict[str, dict[str, str]]:
@@ -132,9 +153,12 @@ def _read_mapping_table() -> dict[str, dict[str, str]]:
     (empty strings mean unset). Last row wins for duplicate codes.
     """
     by_code: dict[str, dict[str, str]] = {}
-    if _CSV_PATH.is_file():
+    csv_paths = [_RAW_EXPORT_CSV_PATH, _CSV_PATH]
+    for csv_path in csv_paths:
+        if not csv_path.is_file():
+            continue
         try:
-            text = _CSV_PATH.read_text(encoding="utf-8-sig")
+            text = csv_path.read_text(encoding="utf-8-sig")
             lines = text.splitlines()
             if lines:
                 reader = csv.DictReader(lines)
@@ -146,12 +170,17 @@ def _read_mapping_table() -> dict[str, dict[str, str]]:
                             continue
                         code = _normalize_sales_code_key(code_raw)
                         by_code[code] = {
-                            "hubspot_owner_id": _cell(row, canon, "hubspot_owner_id"),
+                            "hubspot_owner_id": _normalize_owner_id(
+                                _cell(row, canon, "hubspot_owner_id")
+                            )
+                            or "",
                             "owner_email": _cell(row, canon, "owner_email"),
-                            "owner_name": _cell(row, canon, "owner_name"),
+                            "owner_name": _row_owner_name(row, canon),
                         }
         except (OSError, ValueError):
-            pass
+            continue
+        if by_code:
+            return by_code
     if not by_code:
         return _read_json_fallback()
     return by_code
@@ -172,6 +201,13 @@ def _owner_id_from_email(owners: list, email: str) -> Optional[str]:
         if (o.get("email") or "").strip().lower() == e:
             return _normalize_owner_id(o.get("id"))
     return None
+
+
+def _owner_id_is_valid(owners: list, owner_id: str) -> bool:
+    normalized = _normalize_owner_id(owner_id)
+    if not normalized:
+        return False
+    return any(_normalize_owner_id(o.get("id")) == normalized for o in owners)
 
 
 def _owner_id_from_display_name(owners: list, label: str) -> Optional[str]:
@@ -207,7 +243,9 @@ def hubspot_owner_id_for_sales_code(
     """
     Resolve HubSpot CRM owner id for a CoPilot sales code.
 
-    Uses ``sales_code_owner_map.csv`` if it has data rows; otherwise ``sales_code_owner_map.json``.
+    Uses ``data/CoPilot - HubSpot Data Flow - Sales Codes.csv`` first, then
+    ``data/sales_code_owner_map.csv`` if it has data rows; otherwise
+    ``data/legacy/sales_code_owner_map.json``.
 
     If the row only has email or display name, pass ``hubspot_client`` so we can match
     against ``GET /crm/v3/owners``.
@@ -220,14 +258,13 @@ def hubspot_owner_id_for_sales_code(
     if not row:
         return None
 
-    oid = _normalize_owner_id(row.get("hubspot_owner_id"))
-    if oid:
-        return oid
-
     if not hubspot_client:
-        return None
+        return _normalize_owner_id(row.get("hubspot_owner_id"))
 
     owners = _get_cached_owners(hubspot_client)
+    oid = _normalize_owner_id(row.get("hubspot_owner_id"))
+    if oid and _owner_id_is_valid(owners, oid):
+        return oid
     oid = _owner_id_from_email(owners, row.get("owner_email") or "")
     if oid:
         return oid

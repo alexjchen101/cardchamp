@@ -11,13 +11,18 @@ Use this for:
 - When you don't want status to affect deal stage yet
 
 Usage:
-    python3 sync_initial_setup.py <contact_email>
+    python3 tools/sync_initial_setup.py <contact_email>
 
 CoPilot IDs are read from the contact property ``copilot_account`` (slash-separated if several).
 """
 
 import sys
+from pathlib import Path
 from datetime import datetime, timezone
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
 from copilot import MerchantAPI
 from hubspot.client import HubSpotClient
 from field_mappings import (
@@ -31,6 +36,7 @@ from field_mappings import (
     get_company_names_slash_separated,
     get_ach_provider_hubspot_value,
     merge_multiselect_values,
+    remove_multiselect_options,
     extract_deal_amount,
     extract_sales_code,
     volume_to_range,
@@ -40,6 +46,7 @@ from sales_code_owners import hubspot_owner_id_for_sales_code
 
 # Deal stage (always "Interested" for initial setup)
 STAGE_INTERESTED = "qualifiedtobuy"
+HUBSPOT_ACH_PROVIDER_PROPERTY = "ach___e_check_provider"
 
 
 def _copilot_datetime_to_hubspot_millis(dt_str):
@@ -101,7 +108,7 @@ def sync_initial_setup(contact_email):
             "state", "zip", "city", "address", "website", "platform",
             "monthly_processing_volume", "merchant_id", "date_of_birth",
             "pricing_type", "date_boarded", "live_date", "sales_code", "industry_mcc",
-            "ach_provider",
+            HUBSPOT_ACH_PROVIDER_PROPERTY,
         ])
         current_props = contact.get("properties", {})
     except Exception as e:
@@ -226,7 +233,7 @@ def sync_initial_setup(contact_email):
         pass
     ach_def = None
     try:
-        ach_def = hubspot.get_contact_property_definition("ach_provider")
+        ach_def = hubspot.get_contact_property_definition(HUBSPOT_ACH_PROVIDER_PROPERTY)
     except Exception:
         pass
 
@@ -276,8 +283,8 @@ def sync_initial_setup(contact_email):
 
     ach_hub = get_ach_provider_hubspot_value(all_merchant_data, ach_def)
     if ach_hub:
-        hubspot_updates["ach_provider"] = ach_hub
-        print(f"   ✓ ach_provider (BlueChex): {ach_hub}")
+        hubspot_updates[HUBSPOT_ACH_PROVIDER_PROPERTY] = ach_hub
+        print(f"   ✓ {HUBSPOT_ACH_PROVIDER_PROPERTY} (BlueChex): {ach_hub}")
 
     # Date Boarded / Live Date from CoPilot status (oldest/primary merchant)
     if first_status_data:
@@ -296,9 +303,13 @@ def sync_initial_setup(contact_email):
         hubspot_updates["hubspot_owner_id"] = mapped_owner_from_sales_code
         print(f"   ✓ hubspot_owner_id (sales_code → owner map): {mapped_owner_from_sales_code}")
 
-    # Initial setup: add Potential Merchant while preserving other checkbox statuses
-    hubspot_updates["status_2__cloned_"] = merge_multiselect_values(
+    # Initial setup should keep other roles, but merchant lifecycle values stay mutually exclusive.
+    without_merchant_status = remove_multiselect_options(
         current_props.get("status_2__cloned_", ""),
+        ["Potential Merchant", "Current Merchant"],
+    )
+    hubspot_updates["status_2__cloned_"] = merge_multiselect_values(
+        without_merchant_status,
         ["Potential Merchant"],
     )
     
@@ -342,8 +353,8 @@ def sync_initial_setup(contact_email):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python3 sync_initial_setup.py <contact_email>")
-        print("Example: python3 sync_initial_setup.py test@test.com")
+        print("Usage: python3 tools/sync_initial_setup.py <contact_email>")
+        print("Example: python3 tools/sync_initial_setup.py test@test.com")
         sys.exit(1)
     
     contact_email = sys.argv[1]

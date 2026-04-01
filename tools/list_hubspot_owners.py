@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-List HubSpot CRM owner ids for building ``sales_code_owner_map.json``.
+List HubSpot CRM owner ids for validating / maintaining sales-code owner CSV mappings.
 
 Usage (from repo root):
-    python3 scripts/list_hubspot_owners.py
+    python3 tools/list_hubspot_owners.py
 
 Requires: HUBSPOT_ACCESS_TOKEN in .env
 """

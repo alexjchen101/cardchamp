@@ -11,13 +11,18 @@ Checks CoPilot status and updates HubSpot accordingly:
 This is the "production" sync that should run regularly (daily/hourly).
 
 Usage:
-    python3 sync_with_status.py <contact_email>
+    python3 jobs/sync_with_status.py <contact_email>
 
 CoPilot IDs are read from the contact property ``copilot_account`` (slash-separated if several).
 """
 
 import sys
+from pathlib import Path
 from datetime import datetime, timezone
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
 from copilot import MerchantAPI
 from hubspot.client import HubSpotClient
 from field_mappings import (
@@ -42,6 +47,8 @@ from status_logic import (
     get_current_processor,
 )
 from sales_code_owners import hubspot_owner_id_for_sales_code
+
+HUBSPOT_ACH_PROVIDER_PROPERTY = "ach___e_check_provider"
 
 
 def _copilot_datetime_to_hubspot_millis(dt_str):
@@ -102,7 +109,7 @@ def sync_with_status(contact_email):
             "state", "zip", "city", "address", "website", "platform",
             "monthly_processing_volume", "merchant_id", "date_of_birth", "status_2__cloned_",
             "pricing_type", "date_boarded", "live_date", "sales_code", "industry_mcc",
-            "ach_provider",
+            HUBSPOT_ACH_PROVIDER_PROPERTY,
         ])
         current_props = contact.get("properties", {})
     except Exception as e:
@@ -274,7 +281,7 @@ def sync_with_status(contact_email):
         pass
     ach_def = None
     try:
-        ach_def = hubspot.get_contact_property_definition("ach_provider")
+        ach_def = hubspot.get_contact_property_definition(HUBSPOT_ACH_PROVIDER_PROPERTY)
     except Exception:
         pass
 
@@ -324,8 +331,8 @@ def sync_with_status(contact_email):
 
     ach_hub = get_ach_provider_hubspot_value(all_merchant_data, ach_def)
     if ach_hub:
-        hubspot_updates["ach_provider"] = ach_hub
-        print(f"   ✓ ach_provider (BlueChex): {ach_hub}")
+        hubspot_updates[HUBSPOT_ACH_PROVIDER_PROPERTY] = ach_hub
+        print(f"   ✓ {HUBSPOT_ACH_PROVIDER_PROPERTY} (BlueChex): {ach_hub}")
 
     # Date Boarded / Live Date from CoPilot status (oldest/primary merchant)
     if first_status_data:
@@ -345,20 +352,19 @@ def sync_with_status(contact_email):
         hubspot_updates["hubspot_owner_id"] = mapped_owner_from_sales_code
         print(f"   ✓ hubspot_owner_id (sales_code → owner map): {mapped_owner_from_sales_code}")
 
-    # Add status-driven fields (preserve existing multi-checkbox selections)
-    any_live = any(
-        (sd.get("merchantStatus", {}).get("boardingProcessStatusCd") == "LIVE")
-        for sd in all_status_data
+    # Merchant lifecycle statuses are mutually exclusive, but preserve all other roles.
+    status_values = [get_status(sd) for sd in all_status_data]
+    desired_status = "Current Merchant" if "Current Merchant" in status_values else (
+        "Potential Merchant" if "Potential Merchant" in status_values else None
     )
-    if any_live:
-        # Graduate to Current Merchant: drop "Potential Merchant", keep other roles (e.g. partners)
-        without_potential = remove_multiselect_options(
+    if desired_status:
+        without_merchant_status = remove_multiselect_options(
             current_props.get("status_2__cloned_", ""),
-            ["Potential Merchant"],
+            ["Potential Merchant", "Current Merchant"],
         )
         hubspot_updates["status_2__cloned_"] = merge_multiselect_values(
-            without_potential,
-            ["Current Merchant"],
+            without_merchant_status,
+            [desired_status],
         )
     
     processor = get_current_processor(first_status_data)
@@ -411,8 +417,8 @@ def sync_with_status(contact_email):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python3 sync_with_status.py <contact_email>")
-        print("Example: python3 sync_with_status.py test@test.com")
+        print("Usage: python3 jobs/sync_with_status.py <contact_email>")
+        print("Example: python3 jobs/sync_with_status.py test@test.com")
         sys.exit(1)
     
     contact_email = sys.argv[1]

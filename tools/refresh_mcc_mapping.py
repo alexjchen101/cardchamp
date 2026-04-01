@@ -3,7 +3,7 @@
 Refresh MCC mapping from HubSpot Industry (MCC) options.
 Run when HubSpot adds/updates ``industry_mcc`` dropdown options.
 
-Usage: python3 scripts/refresh_mcc_mapping.py
+Usage: python3 tools/refresh_mcc_mapping.py
 Requires: HUBSPOT_ACCESS_TOKEN in .env
 """
 

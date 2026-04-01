@@ -5,6 +5,7 @@ Handles all HubSpot CRM API operations for contacts and deals.
 """
 
 import os
+import time
 import requests
 from dotenv import load_dotenv
 
@@ -33,6 +34,8 @@ class HubSpotClient:
         self.access_token = os.getenv("HUBSPOT_ACCESS_TOKEN")
         self.base_url = "https://api.hubapi.com"
         self.timeout_seconds = float(os.getenv("HUBSPOT_TIMEOUT_SECONDS", "30"))
+        self.max_retries = int(os.getenv("HUBSPOT_MAX_RETRIES", "4"))
+        self.retry_backoff_seconds = float(os.getenv("HUBSPOT_RETRY_BACKOFF_SECONDS", "2"))
         
         if not self.access_token:
             raise ValueError("HUBSPOT_ACCESS_TOKEN not found in .env file")
@@ -61,19 +64,39 @@ class HubSpotClient:
         """
         url = f"{self.base_url}{endpoint}"
         headers = self._get_headers()
-        
-        response = requests.request(
-            method=method,
-            url=url,
-            headers=headers,
-            json=data,
-            timeout=self.timeout_seconds,
-        )
-        
-        if response.status_code >= 400:
+
+        retryable_statuses = {429, 500, 502, 503, 504}
+        for attempt in range(self.max_retries + 1):
+            try:
+                response = requests.request(
+                    method=method,
+                    url=url,
+                    headers=headers,
+                    json=data,
+                    timeout=self.timeout_seconds,
+                )
+            except requests.RequestException as exc:
+                if attempt >= self.max_retries:
+                    raise Exception(f"HubSpot request failed after retries: {exc}") from exc
+                time.sleep(self.retry_backoff_seconds * (2 ** attempt))
+                continue
+
+            if response.status_code < 400:
+                return response.json() if response.text else {}
+
+            if response.status_code in retryable_statuses and attempt < self.max_retries:
+                retry_after = response.headers.get("Retry-After")
+                if retry_after:
+                    try:
+                        delay = float(retry_after)
+                    except ValueError:
+                        delay = self.retry_backoff_seconds * (2 ** attempt)
+                else:
+                    delay = self.retry_backoff_seconds * (2 ** attempt)
+                time.sleep(delay)
+                continue
+
             raise Exception(f"HubSpot API Error {response.status_code}: {response.text}")
-        
-        return response.json() if response.text else {}
     
     # =========================================================================
     # CONTACT OPERATIONS

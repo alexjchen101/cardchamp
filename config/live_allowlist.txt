@@ -1,6 +1,14 @@
-# One HubSpot contact email per line.
-# This is the safest way to start daily live sync before expanding to all contacts.
-#
-# Example:
-# test0@cardchamp.dev
-# test1@cardchamp.dev
+test0@cardchamp.dev
+test1@cardchamp.dev
+test2@cardchamp.dev
+test3@cardchamp.dev
+test4@cardchamp.dev
+test5@cardchamp.dev
+test6@cardchamp.dev
+test7@cardchamp.dev
+test8@cardchamp.dev
+test9@cardchamp.dev
+test10@cardchamp.dev
+test11@cardchamp.dev
+test12@cardchamp.dev
+test13@cardchamp.dev

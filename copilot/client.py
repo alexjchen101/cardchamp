@@ -5,6 +5,7 @@ Handles authentication headers and HTTP requests.
 """
 
 import os
+import time
 import requests
 from dotenv import load_dotenv
 from .auth import TokenManager
@@ -43,6 +44,9 @@ class CoPilotClient:
         self.api_url = os.getenv("COPILOT_API_URL", "https://api-uat.cardconnect.com")
         self.sales_code = os.getenv("COPILOT_SALES_CODE")
         self.template_id = os.getenv("COPILOT_TEMPLATE_ID")
+        self.timeout_seconds = float(os.getenv("COPILOT_TIMEOUT_SECONDS", "30"))
+        self.max_retries = int(os.getenv("COPILOT_MAX_RETRIES", "4"))
+        self.retry_backoff_seconds = float(os.getenv("COPILOT_RETRY_BACKOFF_SECONDS", "2"))
         
         # Initialize token manager
         self._token_manager = TokenManager(
@@ -83,34 +87,37 @@ class CoPilotClient:
             Exception: If the request fails
         """
         url = f"{self.api_url}{endpoint}"
-        headers = self._get_headers()
-        
-        response = requests.request(
-            method=method,
-            url=url,
-            headers=headers,
-            json=data
-        )
-        
-        # Handle common errors
-        if response.status_code == 401:
-            # Token might be invalid, clear it and retry once
-            self._token_manager.clear_token()
+        retryable_statuses = {401, 429, 500, 502, 503, 504}
+
+        for attempt in range(self.max_retries + 1):
             headers = self._get_headers()
-            response = requests.request(
-                method=method,
-                url=url,
-                headers=headers,
-                json=data
-            )
-        
-        if response.status_code >= 400:
+            try:
+                response = requests.request(
+                    method=method,
+                    url=url,
+                    headers=headers,
+                    json=data,
+                    timeout=self.timeout_seconds,
+                )
+            except requests.RequestException as exc:
+                if attempt >= self.max_retries:
+                    raise Exception(f"CoPilot request failed after retries: {exc}") from exc
+                time.sleep(self.retry_backoff_seconds * (2 ** attempt))
+                continue
+
+            if response.status_code == 401:
+                self._token_manager.clear_token()
+
+            if response.status_code < 400:
+                if response.text:
+                    return response.json()
+                return {}
+
+            if response.status_code in retryable_statuses and attempt < self.max_retries:
+                time.sleep(self.retry_backoff_seconds * (2 ** attempt))
+                continue
+
             raise Exception(f"API Error {response.status_code}: {response.text}")
-        
-        # Return JSON if there's content, otherwise empty dict
-        if response.text:
-            return response.json()
-        return {}
     
     def get(self, endpoint: str) -> dict:
         """Make a GET request."""

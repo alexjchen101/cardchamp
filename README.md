@@ -51,3 +51,4 @@ docs/reference/                archived client/reference files
 
 - `docs/FIELD_MAPPING.md` is the source of truth for synced fields and behavior.
 - `docs/reference/CoPilot - HubSpot Data Flow - Field Mapping.csv` is the original client requirement sheet.
+- `docs/DEPLOYMENT.md` explains a cheap VM + cron deployment path for daily live sync.

@@ -148,6 +148,7 @@ def sync_with_status(contact_email):
                 first_merchant_data = merchant_data
                 first_status_data = status_data
                 first_signature_data = signature_data
+                # ``copilot_account`` is parsed oldest-first, so the first merchant is the OG owner source.
                 mapped_owner_from_sales_code = hubspot_owner_id_for_sales_code(
                     extract_sales_code(first_merchant_data),
                     hubspot,
@@ -169,6 +170,10 @@ def sync_with_status(contact_email):
                 print(f"\n--- DEALS ---")
             deal_name = f"{merchant.get('dbaName', 'Unknown')} - {copilot_id}"
             stage_id, stage_name, stage_num = get_deal_stage_from_status(status_data, signature_data)
+            deal_owner_from_sales_code = hubspot_owner_id_for_sales_code(
+                extract_sales_code(merchant_data),
+                hubspot,
+            )
             existing_deals = hubspot.get_deals_for_contact(contact_id)
             matching_deal = next((d for d in existing_deals if d.get('properties', {}).get('dealname') == deal_name), None)
             
@@ -184,10 +189,10 @@ def sync_with_status(contact_email):
                 dsc = extract_sales_code(merchant_data)
                 if dsc and "sales_code" in deal_prop_names:
                     deal_updates["sales_code"] = dsc
-                if mapped_owner_from_sales_code and str(current_deal_owner or "") != str(
-                    mapped_owner_from_sales_code
+                if deal_owner_from_sales_code and str(current_deal_owner or "") != str(
+                    deal_owner_from_sales_code
                 ):
-                    deal_updates["hubspot_owner_id"] = mapped_owner_from_sales_code
+                    deal_updates["hubspot_owner_id"] = deal_owner_from_sales_code
                 should_patch_deal = (
                     current_stage != stage_id
                     or (deal_amount and stage_num >= 6)
@@ -199,7 +204,7 @@ def sync_with_status(contact_email):
                     print(f"   ✓ Deal updated: {deal_name} → {stage_name}")
             else:
                 deal_amount = extract_deal_amount(merchant_data)
-                owner_id = mapped_owner_from_sales_code or current_props.get("hubspot_owner_id")
+                owner_id = deal_owner_from_sales_code or current_props.get("hubspot_owner_id")
                 deal_props = {"dealname": deal_name, "dealstage": stage_id}
                 if deal_amount:
                     deal_props["amount"] = str(deal_amount)

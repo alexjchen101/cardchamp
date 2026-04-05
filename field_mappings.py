@@ -103,7 +103,22 @@ def _hubspot_pos_rules():
         ("Clover Flex Pocket", lambda s, r, t: not_gw(t) and "clover" in s and "flex pocket" in s),
         ("Clover Kiosk", lambda s, r, t: not_gw(t) and "clover" in s and "kiosk" in s),
         ("Clover Kitchen Display", lambda s, r, t: not_gw(t) and "clover" in s and ("kitchen display" in s or "kds" in s)),
-        ("Clover Barcode Scanner", lambda s, r, t: not_gw(t) and "clover" in s and ("barcode scanner" in s or "scanner" in s)),
+        (
+            "Clover Barcode Scanner",
+            lambda s, r, t: not_gw(t)
+            and "clover" in s
+            and (
+                "barcode" in s
+                or "zebra" in s
+                or "honeywell" in s
+                or "symbol" in s
+                or "ds9308" in s
+                or "ds2208" in s
+                or "ds7708" in s
+                or "ds457" in s
+                or "ds8108" in s
+            ),
+        ),
         ("Clover Cash Drawer", lambda s, r, t: not_gw(t) and "clover" in s and "cash drawer" in s),
         ("Clover Virtual Terminal", lambda s, r, t: not_gw(t) and "clover virtual" in s),
         ("Clover Station", lambda s, r, t: not_gw(t) and "clover" in s and "station" in s),
@@ -113,9 +128,23 @@ def _hubspot_pos_rules():
         ("Ingenico Lane/3600", lambda s, r, t: not_gw(t) and "ingenico" in s and ("lane/3600" in s or "lane 3600" in s)),
         ("Ingenico Desk1600", lambda s, r, t: not_gw(t) and "ingenico" in s and ("desk1600" in s or "desk 1600" in s)),
         ("Ingenico Desk2600", lambda s, r, t: not_gw(t) and "ingenico" in s and ("desk2600" in s or "desk 2600" in s)),
-        ("CardPointe Desk2600", lambda s, r, t: not_gw(t) and ("desk 2600" in s or "desk2600" in s)),
-        ("Ingenico Desk3500", lambda s, r, t: not_gw(t) and ("desk 3500" in s or "desk3500" in s or "desk 1600" in s or "desk1600" in s)),
-        ("CardPointe Desk3500", lambda s, r, t: not_gw(t) and "cardpointe desk3500" in s),
+        (
+            "CardPointe Desk2600",
+            lambda s, r, t: not_gw(t)
+            and ("desk 2600" in s or "desk2600" in s)
+            and ("cardpointe" in s or "ingenico" in s),
+        ),
+        (
+            "Ingenico Desk3500",
+            lambda s, r, t: not_gw(t)
+            and "ingenico" in s
+            and ("desk 3500" in s or "desk3500" in s),
+        ),
+        (
+            "CardPointe Desk3500",
+            lambda s, r, t: not_gw(t)
+            and ("cardpointe desk3500" in s or "cardpointe desk 3500" in s),
+        ),
         ("Ingenico ISC 250 Touch", lambda s, r, t: not_gw(t) and ("isc 250" in s or "isc250" in s) and "touch" in s),
         ("Ingenico iCT250", lambda s, r, t: not_gw(t) and ("ict250" in s or "ict 250" in s)),
         ("Ingenico iCT220", lambda s, r, t: not_gw(t) and ("ict220" in s or "ict 220" in s)),
@@ -135,7 +164,18 @@ def _hubspot_pos_rules():
         ("Dejavoo Z9", lambda s, r, t: not_gw(t) and "dejavoo" in s and "z9" in s),
         ("Dejavoo P1", lambda s, r, t: not_gw(t) and "dejavoo" in s and "p1" in s),
         ("Dejavoo P3", lambda s, r, t: not_gw(t) and "dejavoo" in s and "p3" in s),
-        ("Dejavoo P iPOS Virtual Terminal", lambda s, r, t: not_gw(t) and "dejavoo" in s and "p i pos" in s),
+        (
+            "Dejavoo P iPOS Virtual Terminal",
+            lambda s, r, t: not_gw(t)
+            and "dejavoo" in s
+            and (
+                "p i pos" in s
+                or "p-ipos" in s
+                or "p ipos" in s
+                or "pi pos" in s
+                or "pipos" in gwc(s)
+            ),
+        ),
         ("Dejavoo Terminal", lambda s, r, t: not_gw(t) and "dejavoo" in s),
         ("FD130", lambda s, r, t: not_gw(t) and ("fd130" in s or "fd 130" in s)),
         ("FD150", lambda s, r, t: not_gw(t) and "fd150" in s),

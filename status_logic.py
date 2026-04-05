@@ -92,7 +92,7 @@ def get_current_processor(status_data):
     Get current processor based on CoPilot status.
     
     Logic:
-    - LIVE → "CardChamp"
+    - LIVE / BOARDED → "CardChamp"
     - CANCELLED → "" (blank)
     - Other → None (don't update)
     
@@ -104,11 +104,12 @@ def get_current_processor(status_data):
     """
     merchant_status = status_data.get("merchantStatus", {})
     boarding_status = merchant_status.get("boardingProcessStatusCd", "")
+    gateway_boarding = merchant_status.get("gatewayBoardingStatusCd", "")
     
     # Check if merchant is cancelled
     cancelled_datetime = merchant_status.get("cancelledDatetime")
     
-    if boarding_status == "LIVE":
+    if boarding_status == "LIVE" or gateway_boarding == "BOARDED":
         return "CardChamp"
     
     elif cancelled_datetime is not None:

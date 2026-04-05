@@ -158,6 +158,10 @@ def sync_initial_setup(contact_email):
             
             # Create deal if doesn't exist
             deal_name = f"{merchant.get('dbaName', 'Unknown')} - {copilot_id}"
+            deal_owner_from_sales_code = hubspot_owner_id_for_sales_code(
+                extract_sales_code(merchant_data),
+                hubspot,
+            )
             existing_deals = hubspot.get_deals_for_contact(contact_id)
             matching_deal = next((d for d in existing_deals if d.get('properties', {}).get('dealname') == deal_name), None)
             
@@ -171,8 +175,10 @@ def sync_initial_setup(contact_email):
                 dsc_new = extract_sales_code(merchant_data)
                 if dsc_new and "sales_code" in deal_prop_names:
                     deal_props["sales_code"] = dsc_new
-                if current_props.get("hubspot_owner_id"):
-                    deal_props["hubspot_owner_id"] = current_props["hubspot_owner_id"]
+                if deal_owner_from_sales_code or current_props.get("hubspot_owner_id"):
+                    deal_props["hubspot_owner_id"] = (
+                        deal_owner_from_sales_code or current_props["hubspot_owner_id"]
+                    )
                 response = hubspot._request("POST", "/crm/v3/objects/deals", {"properties": deal_props})
                 hubspot.associate_deal_with_contact(response["id"], contact_id)
                 print(f"   ✓ Deal created: {deal_name}")

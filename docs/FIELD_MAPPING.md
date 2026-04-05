@@ -29,7 +29,7 @@ No `copilot_account_1…6` — retired; use only `copilot_account`.
 | `point_of_sale` | Orders + `equipmentCatalog` + rules | Multi-select; explicit 1:1 rules first, unknowns go to `Other`; **CardPointe Gateway** omitted if any other line on that merchant |
 | `ach___e_check_provider` (`ACH Provider`) | `processing.blueChexSecOptions`, `processing.blueChexSecVolume` | If BlueChex / ACH From Fiserv is present, set to `Fiserv ACH`; otherwise leave blank |
 | `sales_code` | `merchant.salesCode` | OG contact; deal too if `sales_code` exists on deals |
-| `hubspot_owner_id` | sales-code owner map | Contact owner comes from `data/CoPilot - HubSpot Data Flow - Sales Codes.csv`, `data/sales_code_owner_map.csv`, or `data/legacy/sales_code_owner_map.json` when a sales code match exists |
+| `hubspot_owner_id` | sales-code owner map | Contact owner comes from `data/owner_mapping.csv` or `data/legacy/sales_code_owner_map.json` when a sales code match exists; inactive/cancelled codes (no owner on the row) do not assign an owner |
 | `status_2__cloned_` | Boarding status | Merchant lifecycle values are mutually exclusive: pre-live uses `Potential Merchant`, boarded/live uses `Current Merchant` (HubSpot label: Customer); preserve other roles |
 | `current_processor` | Status | `CardChamp` on LIVE; clear on cancel (`sync_with_status` only) potential |
 | `date_boarded`, `live_date` | `merchantStatus` (OG status payload) | Epoch ms / string |

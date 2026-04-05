@@ -34,8 +34,7 @@ tools/sync_initial_setup.py    status-blind setup sync
 field_mappings.py              mapping + transforms
 status_logic.py                deal/status rules
 sales_code_owners.py           sales code -> HubSpot owner resolver
-data/CoPilot - HubSpot Data Flow - Sales Codes.csv raw client owner export
-data/sales_code_owner_map.csv  normalized owner mapping
+data/owner_mapping.csv            sales code → HubSpot owner (primary)
 data/legacy/sales_code_owner_map.json legacy fallback mapping
 hubspot/client.py              HubSpot API client
 copilot/                       CoPilot API client

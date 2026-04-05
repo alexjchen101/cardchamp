@@ -2,12 +2,13 @@
 Map CoPilot ``merchant.salesCode`` → HubSpot ``hubspot_owner_id`` (contact + deal owner).
 
 **Spreadsheet workflow (recommended)**  
-Save either of these CSVs in ``data/``:
+Save the owner mapping CSV in ``data/``:
 
-  - ``data/CoPilot - HubSpot Data Flow - Sales Codes.csv`` (raw client export)
-  - ``data/sales_code_owner_map.csv`` (normalized internal format)
+  - ``data/owner_mapping.csv`` (primary: Sales Codes tab export; columns like ``CoPilot Sales Code``, ``User ID``, ``Email``, ``First Name`` / ``Last Name``)
 
-Header row must include a sales-code column; include at least one owner column per row:
+Rows with a sales code but **no** owner identifiers (User ID, email, or name) are treated as **inactive / cancelled** for mapping: they are not used to set ``hubspot_owner_id``. See ``is_sales_code_inactive_in_owner_map()``.
+
+Header row must include a sales-code column; include at least one owner column per row (when the partner is active):
 
   - ``hubspot_owner_id`` (or ``owner_id``) — best: no API lookup
   - ``owner_email`` (or ``email``) — resolved via HubSpot CRM owners
@@ -15,7 +16,7 @@ Header row must include a sales-code column; include at least one owner column p
     HubSpot owner first+last (case-insensitive, collapsed whitespace)
 
 **Legacy**  
-If ``data/sales_code_owner_map.csv`` is missing or has no data rows,
+If ``data/owner_mapping.csv`` is missing or has no data rows,
 ``data/legacy/sales_code_owner_map.json`` is used:
 ``{ "SALESCODE": "ownerId", ... }`` (case-insensitive keys).
 
@@ -36,8 +37,8 @@ if TYPE_CHECKING:
 
 _ROOT = Path(__file__).resolve().parent
 _DATA_DIR = _ROOT / "data"
-_CSV_PATH = _DATA_DIR / "sales_code_owner_map.csv"
-_RAW_EXPORT_CSV_PATH = _DATA_DIR / "CoPilot - HubSpot Data Flow - Sales Codes.csv"
+# Primary sales-code → owner table (replaces older ``sales_code_owner_map.csv`` / raw export CSVs).
+_OWNER_MAPPING_CSV = _DATA_DIR / "owner_mapping.csv"
 _JSON_PATH = _DATA_DIR / "legacy" / "sales_code_owner_map.json"
 
 # Cached owner list from HubSpot (per process). Cleared on reload_sales_code_owner_map().
@@ -47,7 +48,7 @@ _owners_cache: Optional[list] = None
 def reload_sales_code_owner_map() -> None:
     """Reload mapping files and clear HubSpot owner cache."""
     global _owners_cache
-    _read_mapping_table.cache_clear()
+    _read_owner_mapping_bundle.cache_clear()
     _owners_cache = None
 
 
@@ -86,6 +87,7 @@ def _normalize_csv_fieldnames(names: Optional[list[str]]) -> dict[str, str]:
         "hubspot_owner_id": "hubspot_owner_id",
         "owner_id": "hubspot_owner_id",
         "user_id": "hubspot_owner_id",
+        "userid": "hubspot_owner_id",
         "hubspot_id": "hubspot_owner_id",
         "hs_owner_id": "hubspot_owner_id",
         "owner_email": "owner_email",
@@ -125,6 +127,32 @@ def _row_owner_name(row: dict, canon: dict[str, str]) -> str:
     return combined
 
 
+def _row_has_owner_identifiers(row: dict, canon: dict[str, str]) -> bool:
+    """True if CSV row can resolve to a HubSpot owner (id, email, or first+last name)."""
+    if _normalize_owner_id(_cell(row, canon, "hubspot_owner_id")):
+        return True
+    if _cell(row, canon, "owner_email"):
+        return True
+    if _row_owner_name(row, canon):
+        return True
+    return False
+
+
+def _skip_sales_code_cell(raw: str) -> bool:
+    """Skip blank rows, section headers, and notes (e.g. cancelled-account banner rows)."""
+    code = (raw or "").strip()
+    if not code:
+        return True
+    low = code.lower()
+    if len(code) > 80:
+        return True
+    if "cancelled" in low and ("account" in low or "sales code" in low):
+        return True
+    if low.startswith("inactive"):
+        return True
+    return False
+
+
 def _read_json_fallback() -> dict[str, dict[str, str]]:
     """Upper sales code -> row dict with hubspot_owner_id only."""
     if not _JSON_PATH.is_file():
@@ -147,16 +175,18 @@ def _read_json_fallback() -> dict[str, dict[str, str]]:
 
 
 @lru_cache(maxsize=1)
-def _read_mapping_table() -> dict[str, dict[str, str]]:
+def _read_owner_mapping_bundle() -> tuple[dict[str, dict[str, str]], frozenset[str]]:
     """
-    Returns dict: upper sales_code -> {hubspot_owner_id, owner_email, owner_name}
-    (empty strings mean unset). Last row wins for duplicate codes.
+    Returns (by_code, inactive_codes).
+
+    ``inactive_codes``: sales codes listed in the sheet with **no** owner id/email/name
+    (e.g. cancelled partners). Those codes must not drive ``hubspot_owner_id``.
+    Last data row wins for duplicate codes.
     """
     by_code: dict[str, dict[str, str]] = {}
-    csv_paths = [_RAW_EXPORT_CSV_PATH, _CSV_PATH]
-    for csv_path in csv_paths:
-        if not csv_path.is_file():
-            continue
+    inactive: set[str] = set()
+    csv_path = _OWNER_MAPPING_CSV
+    if csv_path.is_file():
         try:
             text = csv_path.read_text(encoding="utf-8-sig")
             lines = text.splitlines()
@@ -166,24 +196,45 @@ def _read_mapping_table() -> dict[str, dict[str, str]]:
                 if canon.get("sales_code"):
                     for row in reader:
                         code_raw = _cell(row, canon, "sales_code")
-                        if not code_raw:
+                        if _skip_sales_code_cell(code_raw):
                             continue
                         code = _normalize_sales_code_key(code_raw)
-                        by_code[code] = {
-                            "hubspot_owner_id": _normalize_owner_id(
-                                _cell(row, canon, "hubspot_owner_id")
-                            )
-                            or "",
-                            "owner_email": _cell(row, canon, "owner_email"),
-                            "owner_name": _row_owner_name(row, canon),
-                        }
+                        if not code:
+                            continue
+                        if _row_has_owner_identifiers(row, canon):
+                            inactive.discard(code)
+                            by_code[code] = {
+                                "hubspot_owner_id": _normalize_owner_id(
+                                    _cell(row, canon, "hubspot_owner_id")
+                                )
+                                or "",
+                                "owner_email": _cell(row, canon, "owner_email"),
+                                "owner_name": _row_owner_name(row, canon),
+                            }
+                        else:
+                            by_code.pop(code, None)
+                            inactive.add(code)
         except (OSError, ValueError):
-            continue
-        if by_code:
-            return by_code
-    if not by_code:
-        return _read_json_fallback()
-    return by_code
+            pass
+    if not by_code and not inactive:
+        return _read_json_fallback(), frozenset()
+    return by_code, frozenset(inactive)
+
+
+def _read_mapping_table() -> dict[str, dict[str, str]]:
+    return _read_owner_mapping_bundle()[0]
+
+
+def is_sales_code_inactive_in_owner_map(sales_code: Optional[str]) -> bool:
+    """
+    True if ``sales_code`` appears in ``owner_mapping.csv`` as a row with no owner data
+    (inactive / cancelled partner). Not set for unknown codes absent from the file.
+    """
+    if not sales_code:
+        return False
+    code = _normalize_sales_code_key(str(sales_code).strip())
+    _, inactive = _read_owner_mapping_bundle()
+    return code in inactive
 
 
 def _get_cached_owners(client: "HubSpotClient") -> list:
@@ -243,8 +294,7 @@ def hubspot_owner_id_for_sales_code(
     """
     Resolve HubSpot CRM owner id for a CoPilot sales code.
 
-    Uses ``data/CoPilot - HubSpot Data Flow - Sales Codes.csv`` first, then
-    ``data/sales_code_owner_map.csv`` if it has data rows; otherwise
+    Uses ``data/owner_mapping.csv`` when present; otherwise
     ``data/legacy/sales_code_owner_map.json``.
 
     If the row only has email or display name, pass ``hubspot_client`` so we can match

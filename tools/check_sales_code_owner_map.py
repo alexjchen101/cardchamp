@@ -17,8 +17,9 @@ sys.path.insert(0, str(ROOT))
 
 from hubspot.client import HubSpotClient  # noqa: E402
 from sales_code_owners import (  # noqa: E402
-    _CSV_PATH,
+    _OWNER_MAPPING_CSV,
     _normalize_csv_fieldnames,
+    _row_has_owner_identifiers,
     hubspot_owner_id_for_sales_code,
     reload_sales_code_owner_map,
 )
@@ -26,11 +27,11 @@ from sales_code_owners import (  # noqa: E402
 
 def main() -> None:
     reload_sales_code_owner_map()
-    if not _CSV_PATH.is_file():
-        print(f"No {_CSV_PATH.name} — using JSON fallback only; nothing to check.")
+    if not _OWNER_MAPPING_CSV.is_file():
+        print(f"No {_OWNER_MAPPING_CSV.name} — using JSON fallback only; nothing to check.")
         return
     client = HubSpotClient()
-    text = _CSV_PATH.read_text(encoding="utf-8-sig")
+    text = _OWNER_MAPPING_CSV.read_text(encoding="utf-8-sig")
     reader = csv.DictReader(text.splitlines())
     if not reader.fieldnames:
         print("CSV has no header row.")
@@ -45,6 +46,9 @@ def main() -> None:
     for row in reader:
         code = str(row.get(h_code) or "").strip()
         if not code:
+            continue
+        if not _row_has_owner_identifiers(row, canon):
+            print(f"SKIP (no owner row / inactive) {code!r}")
             continue
         oid = hubspot_owner_id_for_sales_code(code, client)
         if oid:

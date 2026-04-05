@@ -60,6 +60,10 @@ def _hubspot_pos_rules():
     def not_gw(t):
         return t != "GATEWAY"
 
+    def gwc(s: str) -> str:
+        """Lowercase alphanumerics only — matches CoPilot names with spaces (e.g. ``ACCEPT BLUE GTW``)."""
+        return re.sub(r"[^a-z0-9]", "", (s or "").lower())
+
     return [
         # (hubspot_option_label, predicate) — order matters; exact known models first,
         # then family buckets for long-tail variants. Unmatched → Other.
@@ -82,8 +86,8 @@ def _hubspot_pos_rules():
         ("USA EPay", lambda s, r, t: gw(t) and "usa epay" in s),
         ("Open Edge", lambda s, r, t: gw(t) and "open edge" in s),
         ("Paymetric", lambda s, r, t: gw(t) and "paymetric" in s),
-        ("Payjunction", lambda s, r, t: gw(t) and "payjunction" in s),
-        ("AcceptBlue", lambda s, r, t: gw(t) and "acceptblue" in s),
+        ("Payjunction", lambda s, r, t: gw(t) and "payjunction" in gwc(s)),
+        ("AcceptBlue", lambda s, r, t: gw(t) and "acceptblue" in gwc(s)),
         ("Clover Flex 4", lambda s, r, t: not_gw(t) and ("flex 4" in s or "flex4" in s) and ("clover" in s or "cardpointe" in s)),
         ("Clover Mini 3", lambda s, r, t: not_gw(t) and ("mini 3" in s or "mini3" in s) and ("clover" in s or "cardpointe" in s)),
         ("Mini 3 - CardPointe Integrated Terminal (US)", lambda s, r, t: not_gw(t) and "mini 3 - cardpointe" in s),
@@ -99,6 +103,8 @@ def _hubspot_pos_rules():
         ("Clover Flex Pocket", lambda s, r, t: not_gw(t) and "clover" in s and "flex pocket" in s),
         ("Clover Kiosk", lambda s, r, t: not_gw(t) and "clover" in s and "kiosk" in s),
         ("Clover Kitchen Display", lambda s, r, t: not_gw(t) and "clover" in s and ("kitchen display" in s or "kds" in s)),
+        ("Clover Barcode Scanner", lambda s, r, t: not_gw(t) and "clover" in s and ("barcode scanner" in s or "scanner" in s)),
+        ("Clover Cash Drawer", lambda s, r, t: not_gw(t) and "clover" in s and "cash drawer" in s),
         ("Clover Virtual Terminal", lambda s, r, t: not_gw(t) and "clover virtual" in s),
         ("Clover Station", lambda s, r, t: not_gw(t) and "clover" in s and "station" in s),
         ("CardPointe Ingenico Lane3000", lambda s, r, t: not_gw(t) and ("lane 3000" in s or "lane3000" in s)),
@@ -106,6 +112,7 @@ def _hubspot_pos_rules():
         ("Ingenico Lane/7000", lambda s, r, t: not_gw(t) and "ingenico" in s and ("lane/7000" in s or "lane 7000" in s)),
         ("Ingenico Lane/3600", lambda s, r, t: not_gw(t) and "ingenico" in s and ("lane/3600" in s or "lane 3600" in s)),
         ("Ingenico Desk1600", lambda s, r, t: not_gw(t) and "ingenico" in s and ("desk1600" in s or "desk 1600" in s)),
+        ("Ingenico Desk2600", lambda s, r, t: not_gw(t) and "ingenico" in s and ("desk2600" in s or "desk 2600" in s)),
         ("CardPointe Desk2600", lambda s, r, t: not_gw(t) and ("desk 2600" in s or "desk2600" in s)),
         ("Ingenico Desk3500", lambda s, r, t: not_gw(t) and ("desk 3500" in s or "desk3500" in s or "desk 1600" in s or "desk1600" in s)),
         ("CardPointe Desk3500", lambda s, r, t: not_gw(t) and "cardpointe desk3500" in s),
@@ -143,6 +150,7 @@ def _hubspot_pos_rules():
         ("FD100", lambda s, r, t: not_gw(t) and "fd100" in s),
         ("FD300TI", lambda s, r, t: not_gw(t) and "fd300ti" in s),
         ("Magtek Reader", lambda s, r, t: not_gw(t) and ("magtek" in s or "idynamo" in s)),
+        ("IDTech Reader", lambda s, r, t: not_gw(t) and ("idtech" in s or "vp3350" in s)),
         ("Credit Card Machine - General", lambda s, r, t: not_gw(t) and ("idtech" in s or "vp3350" in s or "usb wedge" in s or ("encrypt" in s and "usb" in s))),
         ("Hypercom", lambda s, r, t: not_gw(t) and "hypercom" in s),
         ("Poynt", lambda s, r, t: not_gw(t) and "poynt" in s),
@@ -723,7 +731,7 @@ def map_copilot_to_hubspot(
         updates['merchant_id'] = str(backend_mid)
     
     # ACH Provider → HubSpot ``ach_provider``: see ``get_ach_provider_hubspot_value`` in sync scripts
-    # Contact / deal owner ``hubspot_owner_id``: resolved in sync from ``sales_code_owner_map.csv`` (or JSON) via ``sales_code_owners``.
+    # Contact / deal owner ``hubspot_owner_id``: resolved in sync from ``data/owner_mapping.csv`` (or legacy JSON) via ``sales_code_owners``.
 
     # ========== PERSONAL INFO ==========
     

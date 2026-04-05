@@ -66,15 +66,16 @@ python3 tools/sync_initial_setup.py someone@example.com
 
 ## CSV update workflow
 
-The live owner mapping reads these in order:
+The live owner mapping reads:
 
-1. `data/CoPilot - HubSpot Data Flow - Sales Codes.csv`
-2. `data/sales_code_owner_map.csv`
-3. `data/legacy/sales_code_owner_map.json`
+1. `data/owner_mapping.csv` (primary)
+2. `data/legacy/sales_code_owner_map.json` (fallback if the CSV is missing or empty)
+
+Rows with a sales code but no owner id/email/name are treated as inactive/cancelled and do not set `hubspot_owner_id`.
 
 Normal update flow:
 
-1. Replace `data/CoPilot - HubSpot Data Flow - Sales Codes.csv`
+1. Replace `data/owner_mapping.csv`
 2. Optional review:
 
 ```bash

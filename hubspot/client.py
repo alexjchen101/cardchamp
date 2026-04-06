@@ -11,6 +11,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# CoPilot sync must only ever set the primary ``email`` field. Do not PATCH HubSpot
+# secondary-email aggregates (often read-only / UI-managed); stripping avoids
+# accidentally overwriting additional addresses if a caller merges full props.
+_CONTACT_PATCH_EMAIL_DENYLIST = frozenset({"hs_additional_emails"})
+
 
 class HubSpotClient:
     """
@@ -227,13 +232,17 @@ class HubSpotClient:
     def update_contact(self, contact_id: str, properties: dict, filter_to_existing: bool = False) -> dict:
         """
         Update contact properties.
-        
+
+        CoPilot sync uses only the primary ``email`` field for the merchant owner address.
+        Secondary-email aggregate properties (e.g. ``hs_additional_emails``) are stripped
+        so integrations never overwrite additional addresses configured in HubSpot.
+
         Args:
             contact_id: HubSpot contact ID
             properties: Dictionary of property names and values
             filter_to_existing: If True, only send properties that exist in HubSpot
                 (skips numbered fields like company_1 if not created yet)
-            
+
         Returns:
             dict: Updated contact record
         """
@@ -244,6 +253,12 @@ class HubSpotClient:
             if skipped:
                 print(f"   ⚠ Skipped {len(skipped)} properties (not in HubSpot): {', '.join(sorted(skipped)[:5])}{'...' if len(skipped) > 5 else ''}")
             properties = filtered
+        denied = _CONTACT_PATCH_EMAIL_DENYLIST & set(properties.keys())
+        if denied:
+            properties = {k: v for k, v in properties.items() if k not in _CONTACT_PATCH_EMAIL_DENYLIST}
+            print(
+                f"   ℹ️  Omitting non-primary email fields from PATCH (CoPilot only sets email): {', '.join(sorted(denied))}"
+            )
         payload = {"properties": properties}
         return self._request("PATCH", f"/crm/v3/objects/contacts/{contact_id}", payload)
     
@@ -379,3 +394,33 @@ class HubSpotClient:
         """
         response = self._request("GET", "/crm/v3/pipelines/deals")
         return response.get("results", [])
+
+
+def deal_name_for_sync(merchant: dict) -> str:
+    """
+    HubSpot ``dealname`` for deals created by sync: DBA only (no trailing `` - {copilot_id}``).
+    """
+    dba = str((merchant or {}).get("dbaName") or "Unknown").strip()
+    return dba or "Unknown"
+
+
+def find_deal_for_merchant_business(
+    existing_deals: list,
+    merchant: dict,
+    copilot_id: str,
+):
+    """
+    Find a deal associated with this CoPilot merchant: match DBA-only **or** legacy
+    ``{DBA} - {copilot_id}`` so existing deals keep updating after the rename.
+    """
+    dba = deal_name_for_sync(merchant)
+    legacy = f"{dba} - {copilot_id}"
+    targets = {dba, legacy}
+    return next(
+        (
+            d
+            for d in existing_deals
+            if (d.get("properties") or {}).get("dealname") in targets
+        ),
+        None,
+    )

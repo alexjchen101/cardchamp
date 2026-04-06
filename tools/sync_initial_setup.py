@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from copilot import MerchantAPI
-from hubspot.client import HubSpotClient
+from hubspot.client import HubSpotClient, deal_name_for_sync, find_deal_for_merchant_business
 from field_mappings import (
     map_copilot_to_hubspot,
     build_ordered_hardware_display,
@@ -157,13 +157,13 @@ def sync_initial_setup(contact_email):
                     total_volume += vol
             
             # Create deal if doesn't exist
-            deal_name = f"{merchant.get('dbaName', 'Unknown')} - {copilot_id}"
+            deal_name = deal_name_for_sync(merchant)
             deal_owner_from_sales_code = hubspot_owner_id_for_sales_code(
                 extract_sales_code(merchant_data),
                 hubspot,
             )
             existing_deals = hubspot.get_deals_for_contact(contact_id)
-            matching_deal = next((d for d in existing_deals if d.get('properties', {}).get('dealname') == deal_name), None)
+            matching_deal = find_deal_for_merchant_business(existing_deals, merchant, copilot_id)
             
             if matching_deal:
                 print(f"   ℹ️  Deal exists: {deal_name}")

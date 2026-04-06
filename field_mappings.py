@@ -663,7 +663,8 @@ def map_copilot_to_hubspot(
         if len(parts) >= 2:
             updates["lastname"] = _normalize_company_name(parts[1])
     
-    # Email / phone now overwrite from the primary (oldest) merchant
+    # Primary email only (HubSpot ``email``). Additional addresses stay in HubSpot UI;
+    # sync never sends ``hs_additional_emails`` (see ``HubSpotClient.update_contact``).
     if ownership.get('ownerEmail'):
         updates['email'] = ownership['ownerEmail']
     

@@ -108,6 +108,7 @@ def sync_initial_setup(contact_email):
             "state", "zip", "city", "address", "website", "platform",
             "monthly_processing_volume", "merchant_id", "date_of_birth",
             "pricing_type", "date_boarded", "live_date", "sales_code", "industry_mcc",
+            "point_of_sale",
             HUBSPOT_ACH_PROVIDER_PROPERTY,
         ])
         current_props = contact.get("properties", {})
@@ -121,7 +122,7 @@ def sync_initial_setup(contact_email):
     first_status_data = None
     all_merchant_data = []
     total_volume = 0
-    order_list_primary = None  # legacy fallback for map when no catalog orders
+    order_list_primary = None  # fallback when merchant has no catalog orders
     
     deal_prop_names = hubspot.get_deal_property_names()
     mapped_owner_from_sales_code = None
@@ -166,7 +167,20 @@ def sync_initial_setup(contact_email):
             matching_deal = find_deal_for_merchant_business(existing_deals, merchant, copilot_id)
             
             if matching_deal:
-                print(f"   ℹ️  Deal exists: {deal_name}")
+                deal_id = matching_deal.get("id")
+                deal_props_existing = matching_deal.get("properties", {}) or {}
+                current_dealname = (deal_props_existing.get("dealname") or "").strip()
+                if current_dealname != deal_name.strip():
+                    hubspot._request(
+                        "PATCH",
+                        f"/crm/v3/objects/deals/{deal_id}",
+                        {"properties": {"dealname": deal_name}},
+                    )
+                    print(
+                        f"   ✓ Deal renamed: \"{current_dealname}\" → {deal_name}"
+                    )
+                else:
+                    print(f"   ℹ️  Deal exists: {deal_name}")
             else:
                 deal_amount = extract_deal_amount(merchant_data)
                 deal_props = {"dealname": deal_name, "dealstage": STAGE_INTERESTED}
@@ -225,7 +239,9 @@ def sync_initial_setup(contact_email):
     except Exception as e:
         print(f"   ℹ️  point_of_sale mapping: {e}")
     if pos_multiselect:
-        print(f"   ✓ point_of_sale (HubSpot multi-select): {pos_multiselect}")
+        print(f"   ✓ point_of_sale (from CoPilot): {pos_multiselect}")
+        if (current_props.get("point_of_sale") or "").strip():
+            print(f"   ℹ️  point_of_sale: merging with existing HubSpot selections (manual add-ons preserved)")
     
     industry_mcc_def = None
     pricing_def = None

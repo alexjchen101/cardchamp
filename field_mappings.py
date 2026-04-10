@@ -36,8 +36,192 @@ _POINT_OF_SALE_OTHER_LABELS = (
     "Other / Software - Not Listed",
     "Software - Not Listed",
 )
-# Last resort if the portal has not added an Other-style option yet (legacy).
-_POINT_OF_SALE_LEGACY_FALLBACK = ("POS System",)
+# Last resort if the portal has not added an Other-style option yet.
+_POINT_OF_SALE_FALLBACK_LABEL = ("POS System",)
+
+# Embedded HubSpot equipment checkbox labels (~143) — **not** the full ``point_of_sale`` property.
+# Builds the gwc-exact rules at the start of ``_hubspot_pos_rules`` and longest-substring fallback.
+_EMBEDDED_HUBSPOT_POS_LABELS = (
+    "BBPOS CardPointe Mobile Device",
+    "Clover 2D Hand Held Barcode Scanner DS2208",
+    "Clover Barcode Scanner ( Zebra DS9308 hands free)",
+    "Clover Bump Bar KB9000 USB",
+    "Clover Flex Wifi",
+    'Clover Go "All-In-One" Reader and Dock Bundle',
+    "Clover Kitchen Display (KDS)",
+    "Clover Mini 2nd Gen Wifi",
+    "Clover Station Duo WiFi w/ Printer",
+    "Clover Station DUO WiFi w/ Printer and Cash Drawer",
+    "Clover Station Solo with Cash Drawer",
+    "Clover Compact + Swivel Stand Bundle",
+    "Clover Epson Sticky Label Printer for Clover(Epson TM-L90)",
+    "Clover Flex 2nd Gen",
+    "Clover Flex 3 Bundle",
+    "Clover Flex 4 Bundle",
+    "Clover Flex(LTE)",
+    "Clover Flex(LTE) Travel Kit",
+    "Clover Flex 3",
+    "Clover FlexPocket",
+    "Clover Go Gen 2 with Reader & Dock",
+    "Clover Go Gen 3 Reader",
+    "Clover Go with Reader & Belt Clip",
+    "Clover Go with Reader, Dock, and Belt Clip",
+    "Clover KDS bundle with Countertop Stand",
+    "Clover KDS bundle with Wall Mount Stand",
+    "Clover Kitchen Display 24",
+    "Clover Kitchen Display 24 bundle with Countertop Stand",
+    "Clover Kitchen Display 24 with Wall Mount Stand",
+    "Clover Kitchen Printer",
+    "Clover Merchant Keypad",
+    "Clover Mini - WiFi Only",
+    "Clover Mini 3 Bundle",
+    "Clover Mini WiFi Bundle",
+    "Clover Mini 2",
+    "Clover Mini3 SwivelStand",
+    "Clover Star Thermal Kit Printr4",
+    "Clover Station 2(formerly station 2018) with Customer Facing Display and NFC Printer Bundle",
+    "Clover Station 2(formerly Station 2018) with Printer Bundle",
+    "Clover Station 2018 with Printer and Clover Mini Bundle",
+    "Clover Station Duo 2 Bundle w/o CD",
+    "Clover Station Pro with 501P Acorn printer bundle",
+    "Clover Station W/ Cash Drawer",
+    "Clover Swivel Stand",
+    "Clover Thermal Kitchen Printer for Clover (Star Micros TSP143III",
+    "Clover Weight Scale",
+    "First Data FD150",
+    "IDTech Augusta",
+    "IDTech SREDKey",
+    "IDTech SREDKey 2",
+    "IDTech USB Wedge(VT)",
+    "IDTech VivoPay 3300",
+    "IDTech VP3350",
+    "CardPointe Ingenico Desk1500",
+    "CardPointe Ingenico Desk2600",
+    "CardPointe Ingenico Desk2600-Bundle",
+    "CardPointe Ingenico Desk3500",
+    "CardPointe Ingenico Desk3500/IPP315-Bundle",
+    "CardPointe Ingenico Desk3500-Bundle",
+    "CardPointe Ingenico Desk5000",
+    "CardPointe Ingenico Desk5000-Bundle",
+    "CardPointe Ingenico iCT250",
+    "CardPointe Ingenico iPP315",
+    "CardPointe Ingenico iPP350",
+    "CardPointe Ingenico iSC250-Touch",
+    "CardPointe Ingenico iSMP4",
+    "CardPointe Ingenico Lane5000",
+    "CardPointe Ingenico Link2500",
+    "Magtek USB Wedge - Encrypted (VT)",
+    "Magtek USB Wedge - Unencrypted (VT)",
+    "Micros Xstore7.0Ta Dw Rc",
+    "Accept Blue Gtw Rc Srs",
+    "Auth.Net Gateway",
+    "Auth.Net Gateway Ecom",
+    "Cayan Gtw Rc",
+    "Cayan Gtwy Ec Rc Srs",
+    "Cayan V1 Rc Mo",
+    "Cenpos Gtwy Dw Rc",
+    "Cenpos Gtwy Ec Dw Rc",
+    "Cenpos Gtwy Ecom",
+    "Cenpos Gtwy Srs Dw Rc",
+    "Cenpos Gtwy",
+    "Clover Gateway Only",
+    "Clover Software Rc",
+    "Connectx Gtw Rcsrs Ec Ms",
+    "Connectx Gtw Rcsrs Ms",
+    "Cybersource Gateway Ecom",
+    "Dcap Twtran 3.0 Nash",
+    "Dejavoodvcreditrc1.20",
+    "Dtcp Netepay 5.05 Gtw Rc",
+    "Elavn Fusebx Gw Restlodg",
+    "Elavon Fusebox",
+    "Element Pmnt Svc Gtwy Ec",
+    "Element Pmnt Svc Gtwy",
+    "Epicor Rc",
+    "Fd130 Duo",
+    "Fd150 (Nashville)",
+    "Freedompay Gateway",
+    "Freedompay Gtw Ec Multi",
+    "Freedompay Gtw Multi",
+    "Icheckgtwy Dw Srs Rc",
+    "Ingenico Fdrc 2.0 Gw Dw",
+    "Ipospay1.0 Gtw Rc Srs",
+    "Locomobi303 Dw Rc",
+    "Magensa Mmpg V1 Rc",
+    "Mastercard Rc Gtw",
+    "Menusft 7.4 Dd Nash Edc",
+    "Monetra 4.1.0 Dw Ec",
+    "Monetra 8.X Rc Srs",
+    "Monetra8.X Nativesrs Ec",
+    "Motionsoft Gtwy Ec Srs",
+    "Ncr Cp Gw Rc Ss",
+    "Network Mrcht Gtw Iso",
+    "Network Mrcht Gtw Iso Ec",
+    "Networkmerch Gtwy",
+    "Paxbroadpospay1.0Smsdwrc",
+    "Paxbroadpospayv1.0 Rc Dw",
+    "Payjunction Gateway",
+    "Paypal Payflow Gtwy",
+    "Paytrace Gtw Rc",
+    "Pcamerica Nash",
+    "Roam Data Gtw Rc",
+    "Tns Nash Iso Gateway Ec",
+    "Usaepay Gateway",
+    "Usaepay Gtw Rc Ms",
+    "Verifone V400M Terminal",
+    "Vfi Paywareconnect Rc",
+    "Worldnet Gtw Dw Rc",
+    "Gilbarco ATL105 v21.0x",
+    "IT Retail RC v7rx SRS",
+    "LOCOMOBI303 DW RC",
+    "NCR CP GW RC EC SS",
+    "NCR CP GW RC SS",
+    "PassportEDHv8.02.23.03M",
+    "PAXBROADPOSPAY1.0SMSDWRC",
+    "PDI EXC EFC v8.0 RC SRS",
+    "SynTech FuelMast 2.1.3.1",
+    "Verifone Rub Pay-At-The-Pump",
+    "VF Viper 10.00.00 RC VPN",
+    "VF Viper 8.11.00 RC VPN",
+    "Viper 8.02.00 RC SRS",
+    "Viper 8.02.00 RC VPN",
+    "Viper 9.00.00 RC SS VPN",
+)
+
+
+def _gwc_alnum(s: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", (s or "").lower())
+
+
+def _pos_embedded_exact_match_rules():
+    """One ``(label, pred)`` per embedded label: gwc-exact match to that HubSpot checkbox text."""
+    labs = sorted(_EMBEDDED_HUBSPOT_POS_LABELS, key=lambda L: (-len(L), L))
+    return [(lab, lambda s, r, t, L=lab: _gwc_alnum(r) == _gwc_alnum(L)) for lab in labs]
+
+
+_POS_LONGEST_SUBSTRING_LABELS: Optional[tuple] = None
+_EMBEDDED_POS_LABELS_FROZEN: Optional[frozenset] = None
+
+
+def _get_pos_longest_substring_labels():
+    """Embedded labels ≥10 chars, longest first (substring fallback when no predicate matches)."""
+    global _POS_LONGEST_SUBSTRING_LABELS
+    if _POS_LONGEST_SUBSTRING_LABELS is None:
+        _POS_LONGEST_SUBSTRING_LABELS = tuple(
+            sorted([L for L in _EMBEDDED_HUBSPOT_POS_LABELS if len(L) >= 10], key=len, reverse=True)
+        )
+    return _POS_LONGEST_SUBSTRING_LABELS
+
+
+def _get_embedded_pos_labels_frozen():
+    global _EMBEDDED_POS_LABELS_FROZEN
+    if _EMBEDDED_POS_LABELS_FROZEN is None:
+        _EMBEDDED_POS_LABELS_FROZEN = frozenset(_EMBEDDED_HUBSPOT_POS_LABELS)
+    return _EMBEDDED_POS_LABELS_FROZEN
+
+
+def get_point_of_sale_embedded_labels():
+    """The embedded equipment label tuple (gwc-exact prefix of ``_hubspot_pos_rules``)."""
+    return _EMBEDDED_HUBSPOT_POS_LABELS
 
 
 def point_of_sale_from_equipment_text(equipment_str: str):
@@ -48,11 +232,13 @@ def point_of_sale_from_equipment_text(equipment_str: str):
 
 
 # ---------------------------------------------------------------------------
-# HubSpot ``point_of_sale`` labels (must match portal option *labels* where possible).
-# Rules are evaluated in order — first match wins. Expand as you see new catalog strings.
+# HubSpot ``point_of_sale``: one ordered list — embedded gwc-exact rules first, then predicates
+# (abbreviations, gateway type, families), then broader alternate labels. Match: first rule → substring → Other.
 # ---------------------------------------------------------------------------
 def _hubspot_pos_rules():
-    """Return list of (hubspot_label, predicate). Predicate: (s_lower, raw_name, type_upper) -> bool"""
+    """
+    Return ``(hubspot_label, predicate)``. Predicate: ``(s_lower, raw_name, type_upper) -> bool``.
+    """
 
     def gw(t):
         return t == "GATEWAY"
@@ -64,9 +250,120 @@ def _hubspot_pos_rules():
         """Lowercase alphanumerics only — matches CoPilot names with spaces (e.g. ``ACCEPT BLUE GTW``)."""
         return re.sub(r"[^a-z0-9]", "", (s or "").lower())
 
-    return [
-        # (hubspot_option_label, predicate) — order matters; exact known models first,
-        # then family buckets for long-tail variants. Unmatched → Other.
+    return _pos_embedded_exact_match_rules() + [
+        # --- Predicate rules (CoPilot abbreviations / partial strings) ---
+        # --- Verifone / Viper — specific before generic ---
+        ("Viper 9.00.00 RC SS VPN", lambda s, r, t: "viper" in s and "9.00.00" in s and "ss" in s and "vpn" in s),
+        ("VF Viper 10.00.00 RC VPN", lambda s, r, t: "viper" in s and "10.00.00" in s),
+        ("VF Viper 8.11.00 RC VPN", lambda s, r, t: "viper" in s and "8.11.00" in s),
+        ("Viper 8.02.00 RC VPN", lambda s, r, t: "viper" in s and "8.02.00" in s and "vpn" in s and "srs" not in s),
+        ("Viper 8.02.00 RC SRS", lambda s, r, t: "viper" in s and "8.02.00" in s and "srs" in s),
+        ("Verifone V400M Terminal", lambda s, r, t: not_gw(t) and ("v400m" in s or "v400 m" in s)),
+        ("Verifone Rub Pay-At-The-Pump", lambda s, r, t: not_gw(t) and ("pay-at-the-pump" in s or "pay at the pump" in s)),
+        # --- Gateways (abbreviations CoPilot still uses) ---
+        ("Auth.Net Gateway Ecom", lambda s, r, t: gw(t) and "authorize" in s and ("ecom" in s or "e-com" in s)),
+        ("Auth.Net Gateway", lambda s, r, t: gw(t) and "authorize" in s),
+        ("Paytrace Gtw Rc", lambda s, r, t: gw(t) and "paytrace" in s),
+        (
+            "Network Mrcht Gtw Iso Ec",
+            lambda s, r, t: gw(t)
+            and ("network merchants" in s or "network mrcht" in s or "nmi" in s)
+            and ("iso ec" in s or " ecom" in s or "ecom" in s),
+        ),
+        ("Network Mrcht Gtw Iso", lambda s, r, t: gw(t) and ("network merchants" in s or "network mrcht" in s or "nmi" in s)),
+        (
+            "Cybersource Gateway Ecom",
+            lambda s, r, t: gw(t)
+            and "cybersource" in s
+            and ("ecom" in s or "e-com" in s or "ics2" in s or "cpm" in s),
+        ),
+        ("Worldnet Gtw Dw Rc", lambda s, r, t: gw(t) and "worldnet" in s),
+        ("Element Pmnt Svc Gtwy Ec", lambda s, r, t: gw(t) and "element" in s and ("ec" in s or "ecom" in s)),
+        ("Element Pmnt Svc Gtwy", lambda s, r, t: gw(t) and "element" in s),
+        ("Icheckgtwy Dw Srs Rc", lambda s, r, t: gw(t) and "icheck" in s),
+        ("Usaepay Gtw Rc Ms", lambda s, r, t: gw(t) and "usa" in s and "epay" in s and ("ms" in s or "multi" in s)),
+        ("Usaepay Gateway", lambda s, r, t: gw(t) and "usa" in s and "epay" in s),
+        ("Payjunction Gateway", lambda s, r, t: gw(t) and "payjunction" in gwc(s)),
+        ("Ipospay1.0 Gtw Rc Srs", lambda s, r, t: gw(t) and "ipospay" in gwc(s)),
+        ("Networkmerch Gtwy", lambda s, r, t: gw(t) and "networkmerch" in gwc(s)),
+        ("Accept Blue Gtw Rc Srs", lambda s, r, t: gw(t) and "acceptblue" in gwc(s)),
+        ("Freedompay Gtw Ec Multi", lambda s, r, t: gw(t) and "freedompay" in s and ("ec" in s or "ecom" in s)),
+        ("Freedompay Gtw Multi", lambda s, r, t: gw(t) and "freedompay" in s),
+        ("Freedompay Gateway", lambda s, r, t: gw(t) and "freedompay" in s),
+        ("Paypal Payflow Gtwy", lambda s, r, t: gw(t) and "paypal" in s),
+        ("Elavon Fusebox", lambda s, r, t: gw(t) and "elavon" in s and "fusebox" in s),
+        ("Cayan Gtw Rc", lambda s, r, t: gw(t) and "cayan" in s and "gtw" in gwc(s)),
+        ("Cenpos Gtwy Ecom", lambda s, r, t: gw(t) and "cenpos" in s and ("ecom" in s or "ec" in gwc(s))),
+        ("Cenpos Gtwy", lambda s, r, t: gw(t) and "cenpos" in s),
+        ("Clover Gateway Only", lambda s, r, t: gw(t) and "clover" in s and "gateway" in s and "only" in s),
+        ("Clover Software Rc", lambda s, r, t: gw(t) and "clover" in s and "software" in s and "rc" in s),
+        ("Mastercard Rc Gtw", lambda s, r, t: gw(t) and "mastercard" in s and "gtw" in gwc(s)),
+        ("Tns Nash Iso Gateway Ec", lambda s, r, t: gw(t) and "tns" in s and "nash" in s),
+        ("Roam Data Gtw Rc", lambda s, r, t: gw(t) and "roam" in s),
+        ("Magensa Mmpg V1 Rc", lambda s, r, t: gw(t) and "magensa" in s),
+        ("Vfi Paywareconnect Rc", lambda s, r, t: gw(t) and "paywareconnect" in s),
+        # --- Clover hardware; partial CoPilot strings ---
+        ("Clover Flex 4 Bundle", lambda s, r, t: not_gw(t) and ("flex 4" in s or "flex4" in s) and ("clover" in s or "cardpointe" in s)),
+        ("Clover Mini 3 Bundle", lambda s, r, t: not_gw(t) and ("mini 3" in s or "mini3" in s) and ("clover" in s or "cardpointe" in s)),
+        ("Clover FlexPocket", lambda s, r, t: not_gw(t) and "clover" in s and ("flexpocket" in gwc(s) or "flex pocket" in s)),
+        (
+            "Clover Bump Bar KB9000 USB",
+            lambda s, r, t: not_gw(t) and "clover" in s and "bump bar" in s,
+        ),
+        (
+            "Clover Kitchen Display (KDS)",
+            lambda s, r, t: not_gw(t)
+            and "clover" in s
+            and "bump bar" not in s
+            and ("kitchen display" in s or "(kds)" in s or " kds" in s),
+        ),
+        # DS2208 before Zebra: CoPilot catalog uses ``Clover 2D Hand Held Barcode Scanner`` without ``ds2208`` in the name.
+        (
+            "Clover 2D Hand Held Barcode Scanner DS2208",
+            lambda s, r, t: not_gw(t)
+            and "clover" in s
+            and ("ds2208" in s or ("2d" in s and "hand held" in s and "barcode" in s)),
+        ),
+        (
+            "Clover Barcode Scanner ( Zebra DS9308 hands free)",
+            lambda s, r, t: not_gw(t)
+            and "clover" in s
+            and ("ds9308" in s or "zebra" in s or "9308" in s),
+        ),
+        ("BBPOS CardPointe Mobile Device", lambda s, r, t: not_gw(t) and ("cardpointe mobile" in s or "bbpos" in s)),
+        ("First Data FD150", lambda s, r, t: not_gw(t) and "fd150" in s and "nashville" not in s),
+        ("Fd150 (Nashville)", lambda s, r, t: not_gw(t) and "fd150" in s and "nashville" in s),
+        ("Fd130 Duo", lambda s, r, t: not_gw(t) and "fd130" in s and "duo" in s),
+        # --- CardPointe Ingenico ---
+        ("CardPointe Ingenico Lane5000", lambda s, r, t: not_gw(t) and ("lane 5000" in s or "lane5000" in s)),
+        ("CardPointe Ingenico Link2500", lambda s, r, t: not_gw(t) and ("link 2500" in s or "link2500" in s)),
+        ("CardPointe Ingenico iPP315", lambda s, r, t: not_gw(t) and ("ipp315" in s or "ip 315" in s)),
+        ("CardPointe Ingenico iPP350", lambda s, r, t: not_gw(t) and ("ipp350" in s or "ip 350" in s)),
+        ("CardPointe Ingenico iSC250-Touch", lambda s, r, t: not_gw(t) and ("isc250" in s or "isc 250" in s) and "touch" in s),
+        ("CardPointe Ingenico iSMP4", lambda s, r, t: not_gw(t) and "ismp4" in s),
+        ("CardPointe Ingenico iCT250", lambda s, r, t: not_gw(t) and ("ict250" in s or "ict 250" in s)),
+        (
+            "CardPointe Ingenico Desk3500/IPP315-Bundle",
+            lambda s, r, t: not_gw(t) and "desk3500" in gwc(s) and "ipp315" in gwc(s),
+        ),
+        ("CardPointe Ingenico Desk3500-Bundle", lambda s, r, t: not_gw(t) and "desk3500" in gwc(s) and "bundle" in s),
+        ("CardPointe Ingenico Desk5000-Bundle", lambda s, r, t: not_gw(t) and "desk5000" in gwc(s) and "bundle" in s),
+        ("CardPointe Ingenico Desk5000", lambda s, r, t: not_gw(t) and "desk5000" in gwc(s)),
+        ("CardPointe Ingenico Desk3500", lambda s, r, t: not_gw(t) and "ingenico" in s and ("desk 3500" in s or "desk3500" in s)),
+        ("CardPointe Ingenico Desk2600-Bundle", lambda s, r, t: not_gw(t) and "desk2600" in gwc(s) and "bundle" in s),
+        (
+            "CardPointe Ingenico Desk2600",
+            lambda s, r, t: not_gw(t)
+            and ("desk 2600" in s or "desk2600" in s)
+            and ("cardpointe" in s or "ingenico" in s),
+        ),
+        ("CardPointe Ingenico Desk1500", lambda s, r, t: not_gw(t) and "desk1500" in gwc(s)),
+        # --- IDTech / Magtek ---
+        ("IDTech VP3350", lambda s, r, t: not_gw(t) and "vp3350" in s),
+        ("IDTech USB Wedge(VT)", lambda s, r, t: not_gw(t) and "idtech" in s and "usb wedge" in s),
+        ("Magtek USB Wedge - Encrypted (VT)", lambda s, r, t: not_gw(t) and "magtek" in s and "encrypt" in s),
+        ("Magtek USB Wedge - Unencrypted (VT)", lambda s, r, t: not_gw(t) and "magtek" in s and "unencrypt" in s),
+        # --- Alternate HubSpot labels & software POS (broader matches; order still matters) ---
         (
             "CardPointe Virtual Terminal",
             lambda s, r, t: "cardpointe" in s
@@ -92,8 +389,22 @@ def _hubspot_pos_rules():
         ("Clover Mini 3", lambda s, r, t: not_gw(t) and ("mini 3" in s or "mini3" in s) and ("clover" in s or "cardpointe" in s)),
         ("Mini 3 - CardPointe Integrated Terminal (US)", lambda s, r, t: not_gw(t) and "mini 3 - cardpointe" in s),
         ("Clover Compact - CardPointe Integrated (US)", lambda s, r, t: not_gw(t) and ("clover compact" in s or "compact - cardpointe" in s)),
-        ("Clover Mini", lambda s, r, t: not_gw(t) and ("clover" in s or ("cardpointe" in s and "integrated terminal" in s)) and "mini" in s and "mini 3" not in s and "mini3" not in s),
-        ("Clover Flex", lambda s, r, t: not_gw(t) and ("clover" in s or "cardpointe" in s) and "flex" in s and "flex 4" not in s and "flex4" not in s),
+        (
+            "Clover Mini",
+            lambda s, r, t: not_gw(t)
+            and ("clover" in s or ("cardpointe" in s and "integrated terminal" in s))
+            and "mini" in s
+            and "mini 3" not in s
+            and "mini3" not in s,
+        ),
+        (
+            "Clover Flex",
+            lambda s, r, t: not_gw(t)
+            and ("clover" in s or "cardpointe" in s)
+            and "flex" in s
+            and "flex 4" not in s
+            and "flex4" not in s,
+        ),
         ("Clover Compact", lambda s, r, t: not_gw(t) and "compact" in s and ("clover" in s or "cardpointe" in s)),
         ("Clover Station Duo", lambda s, r, t: not_gw(t) and "clover" in s and "station" in s and "duo" in s),
         ("Clover Station Solo", lambda s, r, t: not_gw(t) and "clover" in s and "station" in s and "solo" in s),
@@ -102,7 +413,13 @@ def _hubspot_pos_rules():
         ("Clover Go", lambda s, r, t: not_gw(t) and ("clover go" in s or " clover go" in s)),
         ("Clover Flex Pocket", lambda s, r, t: not_gw(t) and "clover" in s and "flex pocket" in s),
         ("Clover Kiosk", lambda s, r, t: not_gw(t) and "clover" in s and "kiosk" in s),
-        ("Clover Kitchen Display", lambda s, r, t: not_gw(t) and "clover" in s and ("kitchen display" in s or "kds" in s)),
+        (
+            "Clover Kitchen Display",
+            lambda s, r, t: not_gw(t)
+            and "clover" in s
+            and "bump bar" not in s
+            and ("kitchen display" in s or "kds" in s),
+        ),
         (
             "Clover Barcode Scanner",
             lambda s, r, t: not_gw(t)
@@ -191,7 +508,11 @@ def _hubspot_pos_rules():
         ("FD300TI", lambda s, r, t: not_gw(t) and "fd300ti" in s),
         ("Magtek Reader", lambda s, r, t: not_gw(t) and ("magtek" in s or "idynamo" in s)),
         ("IDTech Reader", lambda s, r, t: not_gw(t) and ("idtech" in s or "vp3350" in s)),
-        ("Credit Card Machine - General", lambda s, r, t: not_gw(t) and ("idtech" in s or "vp3350" in s or "usb wedge" in s or ("encrypt" in s and "usb" in s))),
+        (
+            "Credit Card Machine - General",
+            lambda s, r, t: not_gw(t)
+            and ("idtech" in s or "vp3350" in s or "usb wedge" in s or ("encrypt" in s and "usb" in s)),
+        ),
         ("Hypercom", lambda s, r, t: not_gw(t) and "hypercom" in s),
         ("Poynt", lambda s, r, t: not_gw(t) and "poynt" in s),
         ("SpotOn POS", lambda s, r, t: not_gw(t) and ("spoton" in s or "spot on" in s)),
@@ -225,31 +546,87 @@ def _get_hubspot_pos_rules():
 
 def logical_pos_label_for_equipment(equipment_name: str, equipment_type_cd: str = "") -> str:
     """
-    Map catalog line → HubSpot ``point_of_sale`` option label (1:1 rules only).
+    Map catalog line → HubSpot ``point_of_sale`` option label.
 
-    If no rule matches, returns **Other** (resolved to the portal option via
-    ``_resolve_point_of_sale_other_value`` in the multiselect builder — not guessed into
-    random gateway buckets).
+    Resolution order:
+
+    1. **Predicate rules** — single ordered list (embedded **gwc-exact** rows first, then abbreviation
+       predicates, then broader alternates). **First match wins**.
+    2. **Longest substring** on embedded labels only (length ≥ 10 chars).
+    3. **Other** (resolved via ``_resolve_point_of_sale_other_value`` when HubSpot schema is available).
+
+    ``_pos_match_candidates_for_line`` may supply two labels (embedded checkbox text + alternate rule label)
+    when both predicates match so ``match_candidates_to_hubspot_option_value`` can PATCH whichever exists.
     """
     raw = equipment_name or ""
     s = raw.lower()
     t = (equipment_type_cd or "").upper()
+
     for label, pred in _get_hubspot_pos_rules():
         try:
             if pred(s, raw, t):
                 return label
         except Exception:
             continue
+
+    _min_sub = 10
+    for L in _get_pos_longest_substring_labels():
+        if len(L) >= _min_sub and L.lower() in s:
+            return L
+
     return "Other"
 
 
 def _pos_match_candidates_for_line(equipment_name: str, equipment_type_cd: str) -> list:
     """
-    Single primary label from 1:1 rules (or **Other**). Matcher uses **exact** HubSpot
-    option label/value only — no fuzzy collision across thousands of gateways.
+    HubSpot **labels** to try for PATCH: first matching **embedded** label and first matching
+    **non-embedded** rule label, when both exist; else longest substring on embedded labels; else **Other**.
     """
-    primary = logical_pos_label_for_equipment(equipment_name, equipment_type_cd)
-    return [primary] if primary else []
+    raw = equipment_name or ""
+    s = raw.lower()
+    t = (equipment_type_cd or "").upper()
+    out = []
+    seen = set()
+
+    def add(label):
+        if label and label not in seen:
+            seen.add(label)
+            out.append(label)
+
+    embedded_set = _get_embedded_pos_labels_frozen()
+    first_embedded = None
+    first_other = None
+    for label, pred in _get_hubspot_pos_rules():
+        try:
+            if not pred(s, raw, t):
+                continue
+        except Exception:
+            continue
+        if label in embedded_set:
+            if first_embedded is None:
+                first_embedded = label
+        else:
+            if first_other is None:
+                first_other = label
+        if first_embedded and first_other:
+            break
+
+    if first_embedded:
+        add(first_embedded)
+    if first_other:
+        add(first_other)
+
+    if not first_embedded and not first_other:
+        _min_sub = 10
+        for L in _get_pos_longest_substring_labels():
+            if len(L) >= _min_sub and L.lower() in s:
+                add(L)
+                break
+
+    if not out:
+        add("Other")
+
+    return out
 
 
 def _hubspot_option_rows(property_definition: Optional[dict]) -> list:
@@ -275,7 +652,7 @@ def _resolve_point_of_sale_other_value(property_definition: Optional[dict]) -> O
     Tries labels in order; add **Other** (or ``Other / Software - Not Listed``) to the
     ``point_of_sale`` property in HubSpot so ops can refine options over time.
     """
-    prefer = _POINT_OF_SALE_OTHER_LABELS + _POINT_OF_SALE_LEGACY_FALLBACK
+    prefer = _POINT_OF_SALE_OTHER_LABELS + _POINT_OF_SALE_FALLBACK_LABEL
     hub_rows = _hubspot_option_rows(property_definition)
     if not hub_rows:
         return prefer[0]
@@ -634,6 +1011,8 @@ def map_copilot_to_hubspot(
             (use map_business_to_hubspot for numbered fields instead)
         order_list_response: Optional GET /order/list JSON when merchant.equipment is empty
         point_of_sale_value: Pre-built HubSpot multi-select (option values, semicolon-separated)
+            from CoPilot orders/catalog. Merged with any existing ``point_of_sale`` on the
+            contact so manual boarding selections (VAR sheet, etc.) are not removed.
         
     Returns:
         dict: HubSpot field updates
@@ -732,9 +1111,14 @@ def map_copilot_to_hubspot(
         # Use backend platform, default to North if not found
         updates['platform'] = platform_map.get(backend_platform, "North")
     
-    # Point of Sale / Software (HubSpot multi-select checkbox)
+    # Point of Sale / Equipment (HubSpot multi-select) — merge into existing; never replace
+    # manual selections (e.g. Dejavoo P1/P3, iPOS Virtual Terminal from VAR workflow).
+    existing_pos = (current_contact_props or {}).get("point_of_sale") or ""
     if point_of_sale_value:
-        updates["point_of_sale"] = point_of_sale_value
+        additions = [p.strip() for p in str(point_of_sale_value).split(";") if p.strip()]
+        merged = merge_multiselect_values(existing_pos, additions)
+        if merged:
+            updates["point_of_sale"] = merged
     else:
         equipment_str = None
         equipment = merchant.get("equipment") or []
@@ -748,7 +1132,7 @@ def map_copilot_to_hubspot(
         if equipment_str:
             pos = point_of_sale_from_equipment_text(equipment_str)
             if pos:
-                updates["point_of_sale"] = pos
+                updates["point_of_sale"] = merge_multiselect_values(existing_pos, [pos])
     
     # ========== FINANCIAL INFO ==========
     
@@ -772,7 +1156,7 @@ def map_copilot_to_hubspot(
         updates['merchant_id'] = str(backend_mid)
     
     # ACH Provider → HubSpot ``ach_provider``: see ``get_ach_provider_hubspot_value`` in sync scripts
-    # Contact / deal owner ``hubspot_owner_id``: resolved in sync from ``data/owner_mapping.csv`` (or legacy JSON) via ``sales_code_owners``.
+    # Contact / deal owner ``hubspot_owner_id``: resolved in sync from ``data/owner_mapping.csv`` (or JSON fallback) via ``sales_code_owners``.
 
     # ========== PERSONAL INFO ==========
     

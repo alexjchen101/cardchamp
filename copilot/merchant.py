@@ -303,11 +303,15 @@ class MerchantAPI:
         catalog = {}
         page = 1
         page_size = 100
+        total = None
+        rows_fetched = 0
         while True:
             r = self.client.get(
                 f"/equipmentCatalog/list?salesCode={sales}&pageSize={page_size}&pageNumber={page}"
             )
             rows = r.get("rows") or []
+            total = r.get("totalServerItemsCount")
+            rows_fetched += len(rows)
             for row in rows:
                 eid = row.get("equipmentId")
                 if eid is None:
@@ -321,10 +325,12 @@ class MerchantAPI:
                     "name": name.strip() or f"Equipment {eid}",
                     "type": (row.get("equipmentTypeCd") or "").upper(),
                 }
-            if len(rows) < page_size:
+            if not rows or len(rows) < page_size:
+                break
+            if total is not None and rows_fetched >= total:
                 break
             page += 1
-            if page > 20:
+            if page > 500:
                 break
         self._equipment_catalog_map = catalog
         return self._equipment_catalog_map

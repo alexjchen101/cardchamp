@@ -15,7 +15,7 @@ Header row must include a sales-code column; include at least one owner column p
   - ``owner_name`` / ``dropdown_name`` / ``rep_name`` / ``name`` — resolved by matching
     HubSpot owner first+last (case-insensitive, collapsed whitespace)
 
-**Legacy**  
+**JSON fallback**  
 If ``data/owner_mapping.csv`` is missing or has no data rows,
 ``data/legacy/sales_code_owner_map.json`` is used:
 ``{ "SALESCODE": "ownerId", ... }`` (case-insensitive keys).

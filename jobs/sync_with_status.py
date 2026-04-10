@@ -109,6 +109,7 @@ def sync_with_status(contact_email):
             "state", "zip", "city", "address", "website", "platform",
             "monthly_processing_volume", "merchant_id", "date_of_birth", "status_2__cloned_",
             "pricing_type", "date_boarded", "live_date", "sales_code", "industry_mcc",
+            "point_of_sale",
             HUBSPOT_ACH_PROVIDER_PROPERTY,
         ])
         current_props = contact.get("properties", {})
@@ -182,7 +183,10 @@ def sync_with_status(contact_email):
                 deal_props_existing = matching_deal.get("properties", {})
                 current_stage = deal_props_existing.get('dealstage')
                 current_deal_owner = deal_props_existing.get("hubspot_owner_id")
+                current_dealname = (deal_props_existing.get("dealname") or "").strip()
                 deal_updates = {"dealstage": stage_id}
+                if current_dealname != deal_name.strip():
+                    deal_updates["dealname"] = deal_name
                 deal_amount = extract_deal_amount(merchant_data)
                 if deal_amount and stage_num >= 6:
                     deal_updates["amount"] = str(deal_amount)
@@ -198,10 +202,16 @@ def sync_with_status(contact_email):
                     or (deal_amount and stage_num >= 6)
                     or (dsc and "sales_code" in deal_prop_names)
                     or "hubspot_owner_id" in deal_updates
+                    or "dealname" in deal_updates
                 )
                 if should_patch_deal:
                     hubspot._request("PATCH", f"/crm/v3/objects/deals/{deal_id}", {"properties": deal_updates})
-                    print(f"   ✓ Deal updated: {deal_name} → {stage_name}")
+                    rename_note = (
+                        f" (renamed from \"{current_dealname}\")"
+                        if "dealname" in deal_updates
+                        else ""
+                    )
+                    print(f"   ✓ Deal updated: {deal_name} → {stage_name}{rename_note}")
             else:
                 deal_amount = extract_deal_amount(merchant_data)
                 owner_id = deal_owner_from_sales_code or current_props.get("hubspot_owner_id")
@@ -272,7 +282,9 @@ def sync_with_status(contact_email):
     except Exception as e:
         print(f"   ℹ️  point_of_sale mapping: {e}")
     if pos_multiselect:
-        print(f"   ✓ point_of_sale (HubSpot multi-select): {pos_multiselect}")
+        print(f"   ✓ point_of_sale (from CoPilot): {pos_multiselect}")
+        if (current_props.get("point_of_sale") or "").strip():
+            print(f"   ℹ️  point_of_sale: merging with existing HubSpot selections (manual add-ons preserved)")
     
     industry_mcc_def = None
     pricing_def = None

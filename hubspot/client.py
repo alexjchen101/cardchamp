@@ -4,6 +4,8 @@ HubSpot API Client
 Handles all HubSpot CRM API operations for contacts and deals.
 """
 
+from __future__ import annotations
+
 import os
 import time
 import requests
@@ -404,23 +406,69 @@ def deal_name_for_sync(merchant: dict) -> str:
     return dba or "Unknown"
 
 
+def _back_end_mid(merchant: dict) -> str | None:
+    plat = (merchant.get("processing") or {}).get("platformDetails") or {}
+    v = plat.get("backEndMid")
+    if v is None:
+        return None
+    s = str(v).strip()
+    return s or None
+
+
+def deal_matches_merchant_business(
+    dealname: str | None,
+    merchant: dict,
+    copilot_id: str,
+) -> bool:
+    """
+    True if this HubSpot deal title belongs to this CoPilot business.
+
+    Matches DBA-only, legacy ``{DBA} - {copilot_id}``, ``{DBA} - {backEndMid}``,
+    or ``{DBA} - <digits>`` (numeric merchant / MID suffix) so we can find and
+    rename old deals to DBA-only.
+    """
+    cur = (dealname or "").strip()
+    dba = deal_name_for_sync(merchant)
+    if cur == dba:
+        return True
+    if cur == f"{dba} - {copilot_id}":
+        return True
+    be = _back_end_mid(merchant)
+    if be and cur == f"{dba} - {be}":
+        return True
+    if not cur.startswith(dba):
+        return False
+    rest = cur[len(dba) :].strip()
+    if not rest.startswith("-"):
+        return False
+    suffix = rest.lstrip("-").strip()
+    if suffix == str(copilot_id):
+        return True
+    if be and suffix == str(be):
+        return True
+    if suffix.replace(" ", "").isdigit():
+        return True
+    return False
+
+
 def find_deal_for_merchant_business(
     existing_deals: list,
     merchant: dict,
     copilot_id: str,
 ):
     """
-    Find a deal associated with this CoPilot merchant: match DBA-only **or** legacy
-    ``{DBA} - {copilot_id}`` so existing deals keep updating after the rename.
+    Find a deal associated with this CoPilot merchant: DBA-only **or** legacy
+    titles with a trailing `` - <id>`` (CoPilot id, back-end MID, or digits).
     """
-    dba = deal_name_for_sync(merchant)
-    legacy = f"{dba} - {copilot_id}"
-    targets = {dba, legacy}
     return next(
         (
             d
             for d in existing_deals
-            if (d.get("properties") or {}).get("dealname") in targets
+            if deal_matches_merchant_business(
+                (d.get("properties") or {}).get("dealname"),
+                merchant,
+                copilot_id,
+            )
         ),
         None,
     )

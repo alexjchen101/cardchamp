@@ -3,6 +3,17 @@
 
 # Sync tracking data (contains merchant IDs)
 sync/tracked_merchants.json
+sync/last_batch_run.json
+
+# CardConnect Data Services (local state — rollups live in SQLite)
+data/sftp_downloads/*.csv
+data/sftp_processed.json
+data/data_services.db
+data/data_services.db-wal
+data/data_services.db-shm
+
+# Regenerate: python3 tools/export_pos_mapping_sources.py
+data/pos_analysis/
 
 # Python
 __pycache__/

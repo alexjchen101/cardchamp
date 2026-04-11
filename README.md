@@ -49,6 +49,7 @@ hubspot/client.py              HubSpot API client
 copilot/                       CoPilot API client
 tools/list_hubspot_owners.py   helper to list HubSpot owner ids
 tools/check_sales_code_owner_map.py validate sales code owner CSV
+tools/data_services_import_status.py  which DS CSVs are ingested in SQLite (optional --compare-remote)
 tools/refresh_mcc_mapping.py   refresh MCC options from HubSpot
 config/live_allowlist.txt      starter allowlist for daily live sync
 docs/FIELD_MAPPING.md          source-of-truth field behavior

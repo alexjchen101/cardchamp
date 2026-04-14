@@ -46,16 +46,22 @@ One-off production sync:
 python3 jobs/sync_with_status.py someone@example.com
 ```
 
-Allowlist daily batch:
+**Recommended:** CoPilot first, then SFTP (one command):
+
+```bash
+python3 jobs/run_go_live_pipeline.py
+```
+
+Daily batch (default: **every contact** with `copilot_account`):
+
+```bash
+python3 jobs/batch_sync.py
+```
+
+Email-only subset (e.g. `config/live_allowlist.txt`):
 
 ```bash
 python3 jobs/batch_sync.py --mode allowlist
-```
-
-All contacts with `copilot_account`:
-
-```bash
-python3 jobs/batch_sync.py --mode all
 ```
 
 Manual/testing setup sync:
@@ -63,6 +69,20 @@ Manual/testing setup sync:
 ```bash
 python3 tools/sync_initial_setup.py someone@example.com
 ```
+
+### Refresh SFTP-backed HubSpot fields without a new drop
+
+The daily job can show **Files processed: 0** when nothing new arrived on SFTP; the HubSpot step still runs and **re-reads the local SQLite rollups** (last ingested MERCHANT / FUNDING / TRANSACTION files), so **mtd_volume**, **ytd_volume**, **last_deposit_date**, and **pci_compliance** stay aligned with whatever is already in the DB.
+
+To **only** push those metrics from SQLite to HubSpot (no SFTP download, no new ingest):
+
+```bash
+python3 jobs/sync_data_services.py --hubspot-only
+```
+
+Default HubSpot scope for data services is the same: **all contacts with `copilot_account`**. Use **`--allowlist`** on `sync_data_services.py` to limit to an email file.
+
+To re-pull files that were already imported (e.g. fix a bad ingest), use **`--force-download`** on a normal `sync_data_services.py` run, or **`--file`** to re-process a specific CSV.
 
 ## CSV update workflow
 
@@ -91,29 +111,24 @@ Each new batch process reads the current CSV fresh.
 Run every day at 2:15 AM server time:
 
 ```cron
-15 2 * * * cd /path/to/CardChamp && /path/to/CardChamp/.venv/bin/python jobs/batch_sync.py --mode allowlist >> /path/to/CardChamp/sync/batch_sync.log 2>&1
+15 2 * * * cd /path/to/CardChamp && /path/to/CardChamp/.venv/bin/python jobs/run_go_live_pipeline.py >> /path/to/CardChamp/sync/go_live_pipeline.log 2>&1
 ```
 
-Later, when you are ready:
+Optional: restrict to allowlist emails only:
 
 ```cron
-15 2 * * * cd /path/to/CardChamp && /path/to/CardChamp/.venv/bin/python jobs/batch_sync.py --mode all >> /path/to/CardChamp/sync/batch_sync.log 2>&1
+15 2 * * * cd /path/to/CardChamp && /path/to/CardChamp/.venv/bin/python jobs/batch_sync.py --mode allowlist >> /path/to/CardChamp/sync/batch_sync.log 2>&1
 ```
 
 The batch runner also writes a JSON summary by default:
 
 - `sync/last_batch_run.json`
 
-## Recommended rollout
+## Scope
 
-Phase 1:
-- keep `config/live_allowlist.txt`
-- run `jobs/batch_sync.py --mode allowlist`
+- Put **CoPilot Account #** on each HubSpot contact that should sync. Each run processes **all** such contacts.
+- Use **`--mode allowlist`** / **`--allowlist`** only when you need an email-limited test run.
 
-Phase 2:
-- switch cron to `jobs/batch_sync.py --mode all`
+## At larger scale
 
-## Before switching to all contacts
-
-- confirm the allowlist run is stable for several days
-- confirm HubSpot rate limits are acceptable
+- confirm HubSpot and CoPilot API rate limits are acceptable for your tenant

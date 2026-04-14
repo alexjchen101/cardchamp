@@ -1026,6 +1026,13 @@ def map_copilot_to_hubspot(
     processing = merchant.get("processing", {})
     
     updates = {}
+
+    def _is_blank(v) -> bool:
+        return v is None or str(v).strip() == ""
+
+    def _can_set_if_blank(field_name: str) -> bool:
+        """Do not overwrite contact-entered fields once populated."""
+        return _is_blank((current_contact_props or {}).get(field_name))
     
     # ========== BASIC INFO ==========
     
@@ -1038,21 +1045,25 @@ def map_copilot_to_hubspot(
     if owner_name:
         parts = owner_name.strip().split(None, 1)  # Split on first space
         if len(parts) >= 1:
-            updates["firstname"] = _normalize_company_name(parts[0])
+            if _can_set_if_blank("firstname"):
+                updates["firstname"] = _normalize_company_name(parts[0])
         if len(parts) >= 2:
-            updates["lastname"] = _normalize_company_name(parts[1])
+            if _can_set_if_blank("lastname"):
+                updates["lastname"] = _normalize_company_name(parts[1])
     
     # Primary email only (HubSpot ``email``). Additional addresses stay in HubSpot UI;
     # sync never sends ``hs_additional_emails`` (see ``HubSpotClient.update_contact``).
     if ownership.get('ownerEmail'):
-        updates['email'] = ownership['ownerEmail']
+        if _can_set_if_blank("email"):
+            updates['email'] = ownership['ownerEmail']
     
     if ownership.get('ownerPhone'):
         updates['phone'] = ownership['ownerPhone']
     
     # Mobile Phone
     if ownership.get('ownerMobilePhone'):
-        updates['mobilephone'] = ownership['ownerMobilePhone']
+        if _can_set_if_blank("mobilephone"):
+            updates['mobilephone'] = ownership['ownerMobilePhone']
     
     # ========== ADDRESS ==========
     

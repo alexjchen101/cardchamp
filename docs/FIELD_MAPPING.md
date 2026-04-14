@@ -43,7 +43,7 @@ One deal per CoPilot ID. Name: `{DBA} - {copilotId}`.
 | `dealstage` | LIVE → Live; BOARDED → Boarded; signature SENT/PENDING/SIGNED → Contract Sent; else Interested |
 | `amount` | Approx. monthly volume when stage ≥ Contract Sent |
 | `hubspot_owner_id` | sales-code owner map / current contact owner fallback |
-| `closedate` | Not set by us — HubSpot default on closed-won |
+| `closedate` | CoPilot ``merchantStatus.boardedDatetime`` (epoch ms) when deal stage is Boarded or Live — same instant as contact ``date_boarded`` |
 
 ## Still unresolved
 

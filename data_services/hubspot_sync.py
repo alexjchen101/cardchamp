@@ -1,19 +1,18 @@
 """
 Data Services → HubSpot Sync
 
-Finds HubSpot contacts whose ``merchant_id`` property contains one of the
-MIDs present in the SFTP data, then pushes:
+Resolves **processing MIDs** from HubSpot ``copilot_account`` (same CoPilot IDs as
+``batch_sync``) via the CoPilot API (``backEndMid``), then matches SFTP rollups in SQLite.
+
+Falls back to ``merchant_id`` on the contact **only** when ``copilot_account`` is empty
+(migration / legacy).
+
+Pushes:
 
     mtd_volume            (Single-line text)
     ytd_volume            (Single-line text)
     last_deposit_date     (Date picker – label "Last Deposit Date"; epoch ms string)
     pci_compliance        (Multiple checkboxes – semicolon-separated values)
-
-MID matching
-------------
-HubSpot stores MIDs in the ``merchant_id`` property as a slash-separated
-string (mirrors CoPilot backEndMid).  Example: "5023456789 / 5023456790"
-We split on "/" and strip whitespace to build the lookup table.
 
 PCI override rule
 -----------------
@@ -32,6 +31,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+from copilot.merchant import MerchantAPI
+from field_mappings import get_copilot_accounts_from_contact
 from hubspot.client import HubSpotClient
 from data_services.aggregator import get_metrics_for_mids
 
@@ -76,8 +77,46 @@ def _build_pci_hubspot_value(pci: str | None) -> str | None:
     return None
 
 
-def _normalize_email(email: str) -> str:
-    return (email or "").strip().lower()
+def _backend_mid_from_merchant_payload(merchant_payload: dict) -> str | None:
+    """Processing MID from CoPilot ``GET /merchant/{id}`` response."""
+    m = merchant_payload.get("merchant") or {}
+    mid = (m.get("processing") or {}).get("platformDetails", {}).get("backEndMid")
+    if mid is None:
+        return None
+    s = str(mid).strip()
+    return s or None
+
+
+def _resolve_mids_from_copilot_ids(copilot: MerchantAPI, copilot_ids: list[str]) -> list[str]:
+    """Call CoPilot for each ID; return unique backEndMids in first-seen order."""
+    mids: list[str] = []
+    seen: set[str] = set()
+    for raw_id in copilot_ids:
+        cid = (raw_id or "").strip()
+        if not cid:
+            continue
+        try:
+            payload = copilot.get_merchant(cid)
+        except Exception as exc:
+            print(f"   ⚠️  CoPilot get_merchant({cid!r}) failed: {exc}")
+            continue
+        mid = _backend_mid_from_merchant_payload(payload)
+        if mid and mid not in seen:
+            seen.add(mid)
+            mids.append(mid)
+    return mids
+
+
+def _collect_db_mids(conn: sqlite3.Connection) -> set[str]:
+    out: set[str] = set()
+    for row in conn.execute(
+        "SELECT DISTINCT mid FROM daily_txn_totals "
+        "UNION SELECT DISTINCT mid FROM merchant_pci "
+        "UNION SELECT DISTINCT mid FROM mid_last_funding"
+    ):
+        if row[0]:
+            out.add(row[0])
+    return out
 
 
 def _property_updates_for_contact(conn: sqlite3.Connection, mids: list[str]) -> dict[str, str]:
@@ -100,58 +139,42 @@ def _property_updates_for_contact(conn: sqlite3.Connection, mids: list[str]) -> 
     return updates
 
 
-def build_mid_to_contact_map(hubspot: HubSpotClient) -> dict[str, list[dict]]:
-    """
-    Iterate all HubSpot contacts that have a ``merchant_id`` value.
-    Returns a dict mapping each individual MID string → list of contact records.
-
-    One MID should map to exactly one contact, but the list handles edge cases.
-    Each contact record is: {"id": "...", "email": "...", "merchant_id": "...", "contact_id": "..."}
-    """
-    mid_map: dict[str, list[dict]] = {}
-    for contact in hubspot.iter_contacts_with_property("merchant_id"):
-        props = contact.get("properties") or {}
-        raw_mid = props.get("merchant_id") or ""
-        contact_id = contact.get("id")
-        email = props.get("email") or ""
-        for mid in _parse_mids_from_property(raw_mid):
-            entry = {"id": contact_id, "email": email, "merchant_id": raw_mid}
-            mid_map.setdefault(mid, []).append(entry)
-    return mid_map
-
-
-def _build_contact_workset_from_mid_map(
+def _build_contact_workset_from_copilot_full(
     conn: sqlite3.Connection,
-    mid_map: dict[str, list[dict]],
+    hubspot: HubSpotClient,
+    copilot: MerchantAPI,
     *,
-    only_mids_in_db: bool = True,
+    only_mids_in_db: bool,
 ) -> tuple[dict[str, list[str]], dict[str, dict]]:
     """
-    Group MID → HubSpot hits into contact_id → list of MIDs.
-
-    If ``only_mids_in_db``, only MIDs that appear in the local DB (rollups + PCI)
-    are attached.
+    All HubSpot contacts with ``copilot_account`` set: resolve MIDs via CoPilot API.
     """
-    db_mids: set[str] = set()
-    if only_mids_in_db:
-        for row in conn.execute(
-            "SELECT DISTINCT mid FROM daily_txn_totals "
-            "UNION SELECT DISTINCT mid FROM merchant_pci "
-            "UNION SELECT DISTINCT mid FROM mid_last_funding"
-        ):
-            if row[0]:
-                db_mids.add(row[0])
-
+    db_mids = _collect_db_mids(conn)
     contact_to_mids: dict[str, list[str]] = {}
     contact_meta: dict[str, dict] = {}
 
-    for mid, contacts in mid_map.items():
-        if only_mids_in_db and mid not in db_mids:
+    for contact in hubspot.iter_contacts_with_property("copilot_account"):
+        props = contact.get("properties") or {}
+        contact_id = contact.get("id")
+        if not contact_id:
             continue
-        for c in contacts:
-            cid = c["id"]
-            contact_to_mids.setdefault(cid, []).append(mid)
-            contact_meta[cid] = c
+        email = (props.get("email") or "").strip()
+        copilot_ids = get_copilot_accounts_from_contact(
+            {"copilot_account": props.get("copilot_account")}
+        )
+        if not copilot_ids:
+            continue
+        mids = _resolve_mids_from_copilot_ids(copilot, copilot_ids)
+        if only_mids_in_db:
+            mids = [m for m in mids if m in db_mids]
+        if not mids:
+            continue
+        contact_to_mids[contact_id] = mids
+        contact_meta[contact_id] = {
+            "id": contact_id,
+            "email": email,
+            "copilot_account": (props.get("copilot_account") or "").strip(),
+        }
 
     return contact_to_mids, contact_meta
 
@@ -159,25 +182,24 @@ def _build_contact_workset_from_mid_map(
 def _build_contact_workset_from_allowlist(
     conn: sqlite3.Connection,
     hubspot: HubSpotClient,
+    copilot: MerchantAPI,
     allowlist_emails: list[str],
 ) -> tuple[dict[str, list[str]], dict[str, dict], dict[str, int]]:
     """
-    For each allowlisted email, resolve the HubSpot contact and parse ``merchant_id``
-    into MIDs.  Metrics still come from SQLite (CSV / multi-section ingest).
+    Allowlisted emails: resolve MIDs from ``copilot_account`` via CoPilot API.
+    If ``copilot_account`` is empty, fall back to ``merchant_id`` (legacy).
 
-    Returns (contact_to_mids, contact_meta, tallies) where tallies hold
-    not_found / no_merchant_id counts.
+    Returns (contact_to_mids, contact_meta, tallies).
     """
     contact_to_mids: dict[str, list[str]] = {}
     contact_meta: dict[str, dict] = {}
-    tallies = {"not_found": 0, "no_merchant_id": 0}
+    tallies = {"not_found": 0, "no_mid_source": 0, "copilot_resolve_failed": 0}
 
     seen_contact: set[str] = set()
     for raw_email in allowlist_emails:
         email = (raw_email or "").strip()
         if not email or email.startswith("#"):
             continue
-        norm = _normalize_email(email)
 
         try:
             search_results = hubspot.search_contacts_by_email(email)
@@ -192,16 +214,41 @@ def _build_contact_workset_from_allowlist(
             continue
 
         contact_id = search_results["results"][0]["id"]
-        contact = hubspot.get_contact(contact_id, properties=["email", "merchant_id"])
+        contact = hubspot.get_contact(
+            contact_id,
+            properties=["email", "merchant_id", "copilot_account"],
+        )
         props = contact.get("properties") or {}
         resolved_email = (props.get("email") or email).strip()
-        raw_mid = props.get("merchant_id") or ""
-        mids = _parse_mids_from_property(raw_mid)
+        copilot_ids = get_copilot_accounts_from_contact(
+            {"copilot_account": props.get("copilot_account")}
+        )
 
-        if not mids:
-            print(f"   ℹ️  {resolved_email} (id={contact_id}): no merchant_id in HubSpot")
-            tallies["no_merchant_id"] += 1
-            continue
+        mids: list[str] = []
+        if copilot_ids:
+            mids = _resolve_mids_from_copilot_ids(copilot, copilot_ids)
+            if not mids:
+                print(
+                    f"   ✗ {resolved_email} (id={contact_id}): copilot_account set but "
+                    f"could not resolve MID from CoPilot"
+                )
+                tallies["copilot_resolve_failed"] += 1
+                continue
+        else:
+            raw_mid = props.get("merchant_id") or ""
+            mids = _parse_mids_from_property(raw_mid)
+            if mids:
+                print(
+                    f"   ℹ️  {resolved_email}: using merchant_id (set copilot_account "
+                    f"to match batch sync / avoid maintaining both)"
+                )
+            else:
+                print(
+                    f"   ℹ️  {resolved_email} (id={contact_id}): no copilot_account "
+                    f"and no merchant_id"
+                )
+                tallies["no_mid_source"] += 1
+                continue
 
         if contact_id in seen_contact:
             print(f"   ℹ️  {resolved_email}: duplicate allowlist hit for same contact; merging MIDs")
@@ -215,7 +262,8 @@ def _build_contact_workset_from_allowlist(
         contact_meta[contact_id] = {
             "id": contact_id,
             "email": resolved_email,
-            "merchant_id": raw_mid,
+            "merchant_id": (props.get("merchant_id") or "").strip(),
+            "copilot_account": (props.get("copilot_account") or "").strip(),
         }
 
     return contact_to_mids, contact_meta, tallies
@@ -224,6 +272,7 @@ def _build_contact_workset_from_allowlist(
 def sync_data_services_to_hubspot(
     conn: sqlite3.Connection,
     hubspot: HubSpotClient,
+    copilot: MerchantAPI,
     dry_run: bool = False,
     allowlist_emails: list[str] | None = None,
     allowlist_only_mids_in_db: bool = True,
@@ -231,18 +280,18 @@ def sync_data_services_to_hubspot(
     """
     Push Data Services metrics (MTD/YTD, last deposit, PCI) into HubSpot.
 
-    **Full sync (default):** scan every HubSpot contact that has ``merchant_id``,
-    keep MIDs that exist in the local DB, update.
+    **Full sync:** every contact with ``copilot_account`` — resolve MIDs via CoPilot API,
+    optionally restrict to MIDs present in the local DB.
 
-    **Allowlist sync:** pass ``allowlist_emails`` (e.g. from ``config/live_allowlist.txt``).
-    For each email, look up the contact, read ``merchant_id``, compute metrics from SQLite.
-    MIDs do not need a pre-built global map; PCI still comes from ``merchant_pci`` when present.
+    **Allowlist sync (optional):** limit to specific emails (e.g. test accounts); same
+    CoPilot resolution per email; falls back to ``merchant_id`` when ``copilot_account``
+    is empty.
 
     Args:
-        allowlist_only_mids_in_db: When using full sync, ignore HubSpot MIDs absent from DB.
-            Allowlist mode always uses HubSpot MIDs as given (metrics may be sparse if MID missing in DB).
+        allowlist_only_mids_in_db: Full sync: skip MIDs not in SQLite rollups.
         conn:    Open SQLite connection to the data services DB.
         hubspot: Authenticated HubSpotClient.
+        copilot: CoPilot API client (used to map CoPilot ID → backEndMid).
         dry_run: If True, print what would be sent without PATCHing.
 
     Returns:
@@ -255,28 +304,23 @@ def sync_data_services_to_hubspot(
     if allowlist_emails is not None:
         print(f"   Mode: allowlist ({len(allowlist_emails)} line(s) in file)")
         contact_to_mids, contact_meta, tallies = _build_contact_workset_from_allowlist(
-            conn, hubspot, allowlist_emails
+            conn, hubspot, copilot, allowlist_emails
         )
         if tallies.get("not_found"):
             print(f"   Allowlist: {tallies['not_found']} email(s) not found in HubSpot")
-        if tallies.get("no_merchant_id"):
-            print(f"   Allowlist: {tallies['no_merchant_id']} contact(s) without merchant_id")
+        if tallies.get("no_mid_source"):
+            print(f"   Allowlist: {tallies['no_mid_source']} contact(s) without copilot_account or merchant_id")
+        if tallies.get("copilot_resolve_failed"):
+            print(f"   Allowlist: {tallies['copilot_resolve_failed']} contact(s) copilot_account present but MID resolve failed")
     else:
-        print("   Mode: all contacts with merchant_id (MIDs present in local DB)")
-        mid_map = build_mid_to_contact_map(hubspot)
-        print(f"   Found {len(mid_map)} unique MID(s) across HubSpot contacts")
-        db_count = len({
-            row[0]
-            for row in conn.execute(
-                "SELECT DISTINCT mid FROM daily_txn_totals "
-                "UNION SELECT DISTINCT mid FROM merchant_pci "
-                "UNION SELECT DISTINCT mid FROM mid_last_funding"
-            )
-            if row[0]
-        })
+        print("   Mode: all contacts with copilot_account (MIDs from CoPilot API)")
+        db_count = len(_collect_db_mids(conn))
         print(f"   MIDs in local DB: {db_count}")
-        contact_to_mids, contact_meta = _build_contact_workset_from_mid_map(
-            conn, mid_map, only_mids_in_db=allowlist_only_mids_in_db
+        contact_to_mids, contact_meta = _build_contact_workset_from_copilot_full(
+            conn,
+            hubspot,
+            copilot,
+            only_mids_in_db=allowlist_only_mids_in_db,
         )
 
     print(f"   Contacts to process: {len(contact_to_mids)}")
@@ -314,7 +358,8 @@ def sync_data_services_to_hubspot(
         "contacts_errored": errors,
         "dry_run": dry_run,
         "allowlist_not_found": tallies.get("not_found", 0),
-        "allowlist_no_merchant_id": tallies.get("no_merchant_id", 0),
+        "allowlist_no_mid_source": tallies.get("no_mid_source", 0),
+        "allowlist_copilot_resolve_failed": tallies.get("copilot_resolve_failed", 0),
     }
     if allowlist_emails is not None:
         summary["mode"] = "allowlist"

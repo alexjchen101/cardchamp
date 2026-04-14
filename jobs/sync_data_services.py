@@ -6,11 +6,14 @@ Downloads the daily SFTP drop from CardConnect, ingests it into the
 local SQLite database, then pushes updated MTD Volume, YTD Volume,
 Last Date Deposit, and PCI Compliance into HubSpot.
 
+**Production order:** run CoPilot → HubSpot first, then this job. Use
+``jobs/run_go_live_pipeline.py`` so the batch API runs before the SFTP step.
+
 Intended to run once daily after noon (the drop arrives ~12:00 ET).
 
 Usage
 -----
-    # Normal daily run (downloads new files only)
+    # Normal daily run: SFTP ingest, then HubSpot for every contact with copilot_account
     python3 jobs/sync_data_services.py
 
     # Re-process a specific already-downloaded file
@@ -19,8 +22,13 @@ Usage
     # Download + ingest only (no HubSpot push)
     python3 jobs/sync_data_services.py --ingest-only
 
-    # HubSpot push only (skip download/ingest)
+    # HubSpot push only — recompute SFTP-derived fields (mtd_volume, ytd_volume,
+    # last_deposit_date, pci_compliance) from whatever is already in SQLite. Use when
+    # there is no new SFTP file but you want HubSpot refreshed from the last ingest.
     python3 jobs/sync_data_services.py --hubspot-only
+
+    # Same, after CoPilot batch, without re-downloading SFTP:
+    python3 jobs/run_go_live_pipeline.py --skip-copilot-batch --hubspot-only
 
     # Dry-run: show what would be sent to HubSpot without sending
     python3 jobs/sync_data_services.py --dry-run
@@ -31,9 +39,8 @@ Usage
     # Peek at what's on the SFTP without downloading
     python3 jobs/sync_data_services.py --list-remote
 
-    # HubSpot push for allowlisted emails only (same file as batch CoPilot sync)
+    # HubSpot push for specific emails only (e.g. test accounts; optional)
     python3 jobs/sync_data_services.py --hubspot-only --allowlist
-    python3 jobs/sync_data_services.py --hubspot-only --allowlist --allowlist-file config/live_allowlist.txt
 """
 
 from __future__ import annotations
@@ -51,6 +58,7 @@ sys.path.insert(0, str(ROOT))
 from data_services.sftp_client import DataServicesSFTPClient, SFTP_REMOTE_DIR
 from data_services.parser import detect_cardconnect_flat_kind, read_flat_csv_dict_rows
 from data_services import db as dsdb
+from copilot.merchant import MerchantAPI
 from data_services.hubspot_sync import sync_data_services_to_hubspot
 from hubspot.client import HubSpotClient
 
@@ -237,6 +245,7 @@ def run(
             conn = dsdb.get_connection()
 
         hubspot = HubSpotClient()
+        copilot = MerchantAPI()
         allowlist_emails = None
         if use_allowlist:
             path = Path(allowlist_file or str(DEFAULT_ALLOWLIST))
@@ -248,6 +257,7 @@ def run(
         hs_summary = sync_data_services_to_hubspot(
             conn,
             hubspot,
+            copilot,
             dry_run=dry_run,
             allowlist_emails=allowlist_emails,
         )

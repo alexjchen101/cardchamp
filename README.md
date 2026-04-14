@@ -10,18 +10,36 @@ Production jobs:
 python3 jobs/sync_with_status.py test@test.com
 ```
 
-Batch / daily sync:
+**Recommended daily run** (CoPilot API first, then SFTP → HubSpot). Both steps update **every HubSpot contact that has CoPilot Account #** (`copilot_account`) set—add that field on contacts you want included.
+
+```bash
+python3 jobs/run_go_live_pipeline.py
+```
+
+Or run the two steps yourself:
+
+```bash
+python3 jobs/batch_sync.py                          # default: all contacts with copilot_account
+python3 jobs/sync_data_services.py
+```
+
+Optional: limit batch to an email file (e.g. tests):
 
 ```bash
 python3 jobs/batch_sync.py --mode allowlist
-python3 jobs/batch_sync.py --mode all
 ```
 
-CardConnect Data Services (SFTP → SQLite → HubSpot: PCI, MTD/YTD volume, last deposit date):
+Data Services: same default (**all** contacts with `copilot_account`); **`--allowlist`** limits to emails only.
 
 ```bash
 python3 jobs/sync_data_services.py
 python3 jobs/sync_data_services.py --allowlist
+```
+
+Refresh **SFTP-backed** HubSpot fields from **existing** SQLite only (no new SFTP download):
+
+```bash
+python3 jobs/sync_data_services.py --hubspot-only
 ```
 
 Manual tools / testing:
@@ -36,6 +54,7 @@ Scripts pull CoPilot IDs from HubSpot `copilot_account`.
 
 ```text
 jobs/sync_with_status.py       production sync for one contact
+jobs/run_go_live_pipeline.py   CoPilot batch then SFTP data services (correct order)
 jobs/batch_sync.py             batch runner for daily sync
 jobs/sync_data_services.py     SFTP daily files → HubSpot (PCI, volumes, deposit date)
 data_services/                 SFTP client, parser, SQLite rollups, HubSpot push
@@ -51,7 +70,7 @@ tools/list_hubspot_owners.py   helper to list HubSpot owner ids
 tools/check_sales_code_owner_map.py validate sales code owner CSV
 tools/data_services_import_status.py  which DS CSVs are ingested in SQLite (optional --compare-remote)
 tools/refresh_mcc_mapping.py   refresh MCC options from HubSpot
-config/live_allowlist.txt      starter allowlist for daily live sync
+config/live_allowlist.txt      optional email list for --mode allowlist / --allowlist
 docs/FIELD_MAPPING.md          source-of-truth field behavior
 docs/POINT_OF_SALE_MAPPING.md  CoPilot → HubSpot POS equipment mapping (for maintainers)
 docs/reference/                archived client/reference files

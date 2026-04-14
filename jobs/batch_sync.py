@@ -3,8 +3,8 @@
 Batch runner for daily CoPilot -> HubSpot sync.
 
 Modes:
-- allowlist: sync contact emails listed in ``config/live_allowlist.txt``
-- all: sync every HubSpot contact with ``copilot_account``
+- all (default): every HubSpot contact with ``copilot_account`` set
+- allowlist: only emails listed in ``config/live_allowlist.txt``
 """
 
 from __future__ import annotations
@@ -93,9 +93,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run batch CoPilot -> HubSpot sync")
     parser.add_argument(
         "--mode",
-        choices=("allowlist", "all"),
-        default="allowlist",
-        help="allowlist = config file; all = every HubSpot contact with copilot_account",
+        choices=("all", "allowlist"),
+        default="all",
+        help="all = every HubSpot contact with copilot_account (default); allowlist = email file only",
     )
     parser.add_argument(
         "--allowlist-file",

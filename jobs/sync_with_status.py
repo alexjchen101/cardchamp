@@ -197,12 +197,20 @@ def sync_with_status(contact_email):
                     deal_owner_from_sales_code
                 ):
                     deal_updates["hubspot_owner_id"] = deal_owner_from_sales_code
+                # Same instant as contact ``date_boarded`` (CoPilot ``boardedDatetime`` → epoch ms).
+                if stage_num >= 7:
+                    boarded_ms = _copilot_datetime_to_hubspot_millis(
+                        status_data.get("merchantStatus", {}).get("boardedDatetime")
+                    )
+                    if boarded_ms:
+                        deal_updates["closedate"] = boarded_ms
                 should_patch_deal = (
                     current_stage != stage_id
                     or (deal_amount and stage_num >= 6)
                     or (dsc and "sales_code" in deal_prop_names)
                     or "hubspot_owner_id" in deal_updates
                     or "dealname" in deal_updates
+                    or "closedate" in deal_updates
                 )
                 if should_patch_deal:
                     hubspot._request("PATCH", f"/crm/v3/objects/deals/{deal_id}", {"properties": deal_updates})
@@ -223,6 +231,12 @@ def sync_with_status(contact_email):
                     deal_props["sales_code"] = dsc_new
                 if owner_id:
                     deal_props["hubspot_owner_id"] = owner_id
+                if stage_num >= 7:
+                    boarded_ms = _copilot_datetime_to_hubspot_millis(
+                        status_data.get("merchantStatus", {}).get("boardedDatetime")
+                    )
+                    if boarded_ms:
+                        deal_props["closedate"] = boarded_ms
                 response = hubspot._request("POST", "/crm/v3/objects/deals", {"properties": deal_props})
                 hubspot.associate_deal_with_contact(response["id"], contact_id)
                 print(f"   ✓ Deal created: {deal_name} ({stage_name})")

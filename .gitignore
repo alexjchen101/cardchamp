@@ -7,6 +7,7 @@ sync/last_batch_run.json
 
 # CardConnect Data Services (local state — rollups live in SQLite)
 data/sftp_downloads/*.csv
+data/transaction_csvs/
 data/sftp_processed.json
 data/data_services.db
 data/data_services.db-wal

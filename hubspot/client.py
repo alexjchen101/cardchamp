@@ -263,7 +263,19 @@ class HubSpotClient:
             )
         payload = {"properties": properties}
         return self._request("PATCH", f"/crm/v3/objects/contacts/{contact_id}", payload)
-    
+
+    def delete_contact(self, contact_id: str) -> dict:
+        """
+        Archive a contact in HubSpot (CRM v3 DELETE archives the record).
+
+        Args:
+            contact_id: HubSpot contact object ID
+
+        Returns:
+            Empty dict on 204, or JSON body if HubSpot returns one
+        """
+        return self._request("DELETE", f"/crm/v3/objects/contacts/{contact_id}")
+
     # =========================================================================
     # DEAL OPERATIONS
     # =========================================================================

@@ -38,9 +38,6 @@ Usage
 
     # Peek at what's on the SFTP without downloading
     python3 jobs/sync_data_services.py --list-remote
-
-    # HubSpot push for specific emails only (e.g. test accounts; optional)
-    python3 jobs/sync_data_services.py --hubspot-only --allowlist
 """
 
 from __future__ import annotations
@@ -62,7 +59,6 @@ from copilot.merchant import MerchantAPI
 from data_services.hubspot_sync import sync_data_services_to_hubspot
 from hubspot.client import HubSpotClient
 
-DEFAULT_ALLOWLIST = ROOT / "config" / "live_allowlist.txt"
 _DOWNLOADS_DIR = (ROOT / "data" / "sftp_downloads").resolve()
 
 # Only these three files are pulled from SFTP and ingested for HubSpot metrics.
@@ -80,18 +76,6 @@ def _safe_delete_downloaded_csv(path: Path) -> None:
         print(f"   Removed local CSV: {path.name}")
     except OSError as exc:
         print(f"   ℹ️  Could not remove {path}: {exc}")
-
-
-def _load_allowlist(path: Path) -> list[str]:
-    emails: list[str] = []
-    if not path.is_file():
-        return emails
-    for raw in path.read_text(encoding="utf-8").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#"):
-            continue
-        emails.append(line)
-    return emails
 
 
 def _extract_file_date(filename: str) -> str:
@@ -189,8 +173,6 @@ def run(
     dry_run: bool = False,
     force_download: bool = False,
     list_remote: bool = False,
-    use_allowlist: bool = False,
-    allowlist_file: str | None = None,
 ) -> int:
     print("=" * 60)
     print("DATA SERVICES SYNC")
@@ -246,20 +228,12 @@ def run(
 
         hubspot = HubSpotClient()
         copilot = MerchantAPI()
-        allowlist_emails = None
-        if use_allowlist:
-            path = Path(allowlist_file or str(DEFAULT_ALLOWLIST))
-            allowlist_emails = _load_allowlist(path)
-            if not allowlist_emails:
-                print(f"   ✗ Allowlist empty or missing: {path}")
-                return 1
 
         hs_summary = sync_data_services_to_hubspot(
             conn,
             hubspot,
             copilot,
             dry_run=dry_run,
-            allowlist_emails=allowlist_emails,
         )
     else:
         hs_summary = {"skipped": "ingest-only mode"}
@@ -310,16 +284,6 @@ def main() -> int:
         action="store_true",
         help="List files available on the SFTP and exit",
     )
-    parser.add_argument(
-        "--allowlist",
-        action="store_true",
-        help="Limit HubSpot updates to emails in live_allowlist.txt (or --allowlist-file)",
-    )
-    parser.add_argument(
-        "--allowlist-file",
-        default=str(DEFAULT_ALLOWLIST),
-        help="Path to allowlist file for --allowlist (default: config/live_allowlist.txt)",
-    )
     args = parser.parse_args()
 
     return run(
@@ -329,8 +293,6 @@ def main() -> int:
         dry_run=args.dry_run,
         force_download=args.force_download,
         list_remote=args.list_remote,
-        use_allowlist=args.allowlist,
-        allowlist_file=args.allowlist_file,
     )
 
 

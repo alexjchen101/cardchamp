@@ -58,12 +58,6 @@ Daily batch (default: **every contact** with `copilot_account`):
 python3 jobs/batch_sync.py
 ```
 
-Email-only subset (e.g. `config/live_allowlist.txt`):
-
-```bash
-python3 jobs/batch_sync.py --mode allowlist
-```
-
 Manual/testing setup sync:
 
 ```bash
@@ -80,7 +74,7 @@ To **only** push those metrics from SQLite to HubSpot (no SFTP download, no new 
 python3 jobs/sync_data_services.py --hubspot-only
 ```
 
-Default HubSpot scope for data services is the same: **all contacts with `copilot_account`**. Use **`--allowlist`** on `sync_data_services.py` to limit to an email file.
+Default HubSpot scope for data services is the same: **all contacts with `copilot_account`**.
 
 To re-pull files that were already imported (e.g. fix a bad ingest), use **`--force-download`** on a normal `sync_data_services.py` run, or **`--file`** to re-process a specific CSV.
 
@@ -114,12 +108,6 @@ Run every day at 2:15 AM server time:
 15 2 * * * cd /path/to/CardChamp && /path/to/CardChamp/.venv/bin/python jobs/run_go_live_pipeline.py >> /path/to/CardChamp/sync/go_live_pipeline.log 2>&1
 ```
 
-Optional: restrict to allowlist emails only:
-
-```cron
-15 2 * * * cd /path/to/CardChamp && /path/to/CardChamp/.venv/bin/python jobs/batch_sync.py --mode allowlist >> /path/to/CardChamp/sync/batch_sync.log 2>&1
-```
-
 The batch runner also writes a JSON summary by default:
 
 - `sync/last_batch_run.json`
@@ -127,7 +115,6 @@ The batch runner also writes a JSON summary by default:
 ## Scope
 
 - Put **CoPilot Account #** on each HubSpot contact that should sync. Each run processes **all** such contacts.
-- Use **`--mode allowlist`** / **`--allowlist`** only when you need an email-limited test run.
 
 ## At larger scale
 

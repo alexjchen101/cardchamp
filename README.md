@@ -19,21 +19,8 @@ python3 jobs/run_go_live_pipeline.py
 Or run the two steps yourself:
 
 ```bash
-python3 jobs/batch_sync.py                          # default: all contacts with copilot_account
+python3 jobs/batch_sync.py
 python3 jobs/sync_data_services.py
-```
-
-Optional: limit batch to an email file (e.g. tests):
-
-```bash
-python3 jobs/batch_sync.py --mode allowlist
-```
-
-Data Services: same default (**all** contacts with `copilot_account`); **`--allowlist`** limits to emails only.
-
-```bash
-python3 jobs/sync_data_services.py
-python3 jobs/sync_data_services.py --allowlist
 ```
 
 Refresh **SFTP-backed** HubSpot fields from **existing** SQLite only (no new SFTP download):
@@ -70,7 +57,6 @@ tools/list_hubspot_owners.py   helper to list HubSpot owner ids
 tools/check_sales_code_owner_map.py validate sales code owner CSV
 tools/data_services_import_status.py  which DS CSVs are ingested in SQLite (optional --compare-remote)
 tools/refresh_mcc_mapping.py   refresh MCC options from HubSpot
-config/live_allowlist.txt      optional email list for --mode allowlist / --allowlist
 docs/FIELD_MAPPING.md          source-of-truth field behavior
 docs/POINT_OF_SALE_MAPPING.md  CoPilot → HubSpot POS equipment mapping (for maintainers)
 docs/reference/                archived client/reference files

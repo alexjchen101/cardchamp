@@ -4,9 +4,6 @@ Data Services → HubSpot Sync
 Resolves **processing MIDs** from HubSpot ``copilot_account`` (same CoPilot IDs as
 ``batch_sync``) via the CoPilot API (``backEndMid``), then matches SFTP rollups in SQLite.
 
-Falls back to ``merchant_id`` on the contact **only** when ``copilot_account`` is empty
-(migration / legacy).
-
 Pushes:
 
     mtd_volume            (Single-line text)
@@ -48,21 +45,6 @@ FIELD_PCI_COMPLIANCE = "pci_compliance"
 # Option **labels / values** for ``pci_compliance`` (must match HubSpot property options).
 PCI_COMPLIANT_VALUE = "Compliant"
 PCI_NOT_COMPLIANT_VALUE = "Non Compliant"
-
-
-def _parse_mids_from_property(merchant_id_value: str) -> list[str]:
-    """
-    Split a slash-separated merchant_id property value into individual MIDs.
-    Handles " / ", "/", and plain whitespace as separators.
-    """
-    if not merchant_id_value:
-        return []
-    parts = []
-    for part in merchant_id_value.replace("/", " ").split():
-        mid = part.strip()
-        if mid:
-            parts.append(mid)
-    return parts
 
 
 def _build_pci_hubspot_value(pci: str | None) -> str | None:
@@ -179,116 +161,22 @@ def _build_contact_workset_from_copilot_full(
     return contact_to_mids, contact_meta
 
 
-def _build_contact_workset_from_allowlist(
-    conn: sqlite3.Connection,
-    hubspot: HubSpotClient,
-    copilot: MerchantAPI,
-    allowlist_emails: list[str],
-) -> tuple[dict[str, list[str]], dict[str, dict], dict[str, int]]:
-    """
-    Allowlisted emails: resolve MIDs from ``copilot_account`` via CoPilot API.
-    If ``copilot_account`` is empty, fall back to ``merchant_id`` (legacy).
-
-    Returns (contact_to_mids, contact_meta, tallies).
-    """
-    contact_to_mids: dict[str, list[str]] = {}
-    contact_meta: dict[str, dict] = {}
-    tallies = {"not_found": 0, "no_mid_source": 0, "copilot_resolve_failed": 0}
-
-    seen_contact: set[str] = set()
-    for raw_email in allowlist_emails:
-        email = (raw_email or "").strip()
-        if not email or email.startswith("#"):
-            continue
-
-        try:
-            search_results = hubspot.search_contacts_by_email(email)
-        except Exception as exc:
-            print(f"   ✗ HubSpot search failed for {email!r}: {exc}")
-            tallies["not_found"] += 1
-            continue
-
-        if not search_results.get("results"):
-            print(f"   ℹ️  No HubSpot contact for allowlisted email {email!r}")
-            tallies["not_found"] += 1
-            continue
-
-        contact_id = search_results["results"][0]["id"]
-        contact = hubspot.get_contact(
-            contact_id,
-            properties=["email", "merchant_id", "copilot_account"],
-        )
-        props = contact.get("properties") or {}
-        resolved_email = (props.get("email") or email).strip()
-        copilot_ids = get_copilot_accounts_from_contact(
-            {"copilot_account": props.get("copilot_account")}
-        )
-
-        mids: list[str] = []
-        if copilot_ids:
-            mids = _resolve_mids_from_copilot_ids(copilot, copilot_ids)
-            if not mids:
-                print(
-                    f"   ✗ {resolved_email} (id={contact_id}): copilot_account set but "
-                    f"could not resolve MID from CoPilot"
-                )
-                tallies["copilot_resolve_failed"] += 1
-                continue
-        else:
-            raw_mid = props.get("merchant_id") or ""
-            mids = _parse_mids_from_property(raw_mid)
-            if mids:
-                print(
-                    f"   ℹ️  {resolved_email}: using merchant_id (set copilot_account "
-                    f"to match batch sync / avoid maintaining both)"
-                )
-            else:
-                print(
-                    f"   ℹ️  {resolved_email} (id={contact_id}): no copilot_account "
-                    f"and no merchant_id"
-                )
-                tallies["no_mid_source"] += 1
-                continue
-
-        if contact_id in seen_contact:
-            print(f"   ℹ️  {resolved_email}: duplicate allowlist hit for same contact; merging MIDs")
-        seen_contact.add(contact_id)
-
-        existing = contact_to_mids.setdefault(contact_id, [])
-        for mid in mids:
-            if mid not in existing:
-                existing.append(mid)
-
-        contact_meta[contact_id] = {
-            "id": contact_id,
-            "email": resolved_email,
-            "merchant_id": (props.get("merchant_id") or "").strip(),
-            "copilot_account": (props.get("copilot_account") or "").strip(),
-        }
-
-    return contact_to_mids, contact_meta, tallies
-
-
 def sync_data_services_to_hubspot(
     conn: sqlite3.Connection,
     hubspot: HubSpotClient,
     copilot: MerchantAPI,
     dry_run: bool = False,
-    allowlist_emails: list[str] | None = None,
-    allowlist_only_mids_in_db: bool = True,
+    *,
+    only_mids_in_db: bool = True,
 ) -> dict:
     """
     Push Data Services metrics (MTD/YTD, last deposit, PCI) into HubSpot.
 
-    **Full sync:** every contact with ``copilot_account`` — resolve MIDs via CoPilot API,
-    optionally restrict to MIDs present in the local DB.
-
-    **Allowlist sync (optional):** limit to specific emails (e.g. test accounts); same
-    CoPilot resolution per email; falls back to ``merchant_id`` when ``copilot_account``
-    is empty.
+    Every contact with ``copilot_account`` set: resolve MIDs via CoPilot API. Optionally
+    restrict to MIDs present in the local DB (default).
 
     Args:
-        allowlist_only_mids_in_db: Full sync: skip MIDs not in SQLite rollups.
+        only_mids_in_db: If True, skip MIDs not present in SQLite rollups.
         conn:    Open SQLite connection to the data services DB.
         hubspot: Authenticated HubSpotClient.
         copilot: CoPilot API client (used to map CoPilot ID → backEndMid).
@@ -299,29 +187,15 @@ def sync_data_services_to_hubspot(
     """
     print("\n--- DATA SERVICES → HUBSPOT SYNC ---")
 
-    tallies: dict[str, int] = {}
-
-    if allowlist_emails is not None:
-        print(f"   Mode: allowlist ({len(allowlist_emails)} line(s) in file)")
-        contact_to_mids, contact_meta, tallies = _build_contact_workset_from_allowlist(
-            conn, hubspot, copilot, allowlist_emails
-        )
-        if tallies.get("not_found"):
-            print(f"   Allowlist: {tallies['not_found']} email(s) not found in HubSpot")
-        if tallies.get("no_mid_source"):
-            print(f"   Allowlist: {tallies['no_mid_source']} contact(s) without copilot_account or merchant_id")
-        if tallies.get("copilot_resolve_failed"):
-            print(f"   Allowlist: {tallies['copilot_resolve_failed']} contact(s) copilot_account present but MID resolve failed")
-    else:
-        print("   Mode: all contacts with copilot_account (MIDs from CoPilot API)")
-        db_count = len(_collect_db_mids(conn))
-        print(f"   MIDs in local DB: {db_count}")
-        contact_to_mids, contact_meta = _build_contact_workset_from_copilot_full(
-            conn,
-            hubspot,
-            copilot,
-            only_mids_in_db=allowlist_only_mids_in_db,
-        )
+    print("   Contacts with copilot_account (MIDs from CoPilot API)")
+    db_count = len(_collect_db_mids(conn))
+    print(f"   MIDs in local DB: {db_count}")
+    contact_to_mids, contact_meta = _build_contact_workset_from_copilot_full(
+        conn,
+        hubspot,
+        copilot,
+        only_mids_in_db=only_mids_in_db,
+    )
 
     print(f"   Contacts to process: {len(contact_to_mids)}")
 
@@ -357,14 +231,8 @@ def sync_data_services_to_hubspot(
         "contacts_skipped_no_data": skipped,
         "contacts_errored": errors,
         "dry_run": dry_run,
-        "allowlist_not_found": tallies.get("not_found", 0),
-        "allowlist_no_mid_source": tallies.get("no_mid_source", 0),
-        "allowlist_copilot_resolve_failed": tallies.get("copilot_resolve_failed", 0),
+        "mode": "all",
     }
-    if allowlist_emails is not None:
-        summary["mode"] = "allowlist"
-    else:
-        summary["mode"] = "all"
 
     print(f"\n   Done: {updated} updated, {skipped} skipped, {errors} errors")
     return summary

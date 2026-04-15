@@ -1,2 +1,0 @@
-# Optional: used only with --mode allowlist (batch) or --allowlist (data services).
-# Live runs use every HubSpot contact that has copilot_account set (no file needed).

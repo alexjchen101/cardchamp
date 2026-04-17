@@ -486,18 +486,27 @@ def smart_title_case(s: str) -> str:
     Title-case for DBA/deal names without mangling common acronyms too badly.
 
     - Capitalizes the first letter of each alpha token
-    - Preserves all-uppercase tokens of length <= 4 (LLC/INC/USA/DBA/etc.)
+    - Preserves a small allowlist of true acronyms (e.g. LLC/INC/USA/IBEW)
     """
     raw = (s or "").strip()
     if not raw:
         return raw
+    keep_acronyms = {
+        "LLC",
+        "INC",
+        "CO",
+        "CORP",
+        "USA",
+        "DBA",
+        "IBEW",
+    }
     out: list[str] = []
     for tok in raw.split():
         clean = tok.strip()
         if not clean:
             continue
         letters = "".join(c for c in clean if c.isalpha())
-        if letters and clean.isupper() and len(letters) <= 4:
+        if letters and clean.isupper() and clean in keep_acronyms:
             out.append(clean)
             continue
         # Basic title-case for the token; handles O'BRIEN -> O'brien.

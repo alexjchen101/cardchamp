@@ -481,12 +481,44 @@ def deal_name_for_sync(merchant: dict) -> str:
     return smart_title_case(dba) or "Unknown"
 
 
+# Minor words: lowercase in the middle/end of a title (and, or, of …). "The" stays The.
+_TITLE_LOWER_WORDS = frozenset(
+    {
+        "and",
+        "or",
+        "nor",
+        "but",
+        "for",
+        "of",
+        "at",
+        "by",
+        "in",
+        "on",
+        "to",
+        "a",
+        "an",
+        "as",
+        "vs",
+        "per",
+    }
+)
+
+
+def _letters_alpha_only(s: str) -> str:
+    return "".join(c for c in s if c.isalpha())
+
+
+def _lower_token_letters(tok: str) -> str:
+    return "".join(c.lower() if c.isalpha() else c for c in tok)
+
+
 def smart_title_case(s: str) -> str:
     """
     Title-case for DBA/deal names without mangling common acronyms too badly.
 
-    - Capitalizes the first letter of each alpha token
     - Preserves a small allowlist of true acronyms (e.g. LLC/INC/USA/IBEW)
+    - Lowercases minor words like *and*, *of*, *or* in the middle/end (not first word)
+    - Keeps *The* as "The" (not "the")
     """
     raw = (s or "").strip()
     if not raw:
@@ -500,16 +532,28 @@ def smart_title_case(s: str) -> str:
         "DBA",
         "IBEW",
     }
+    tokens = raw.split()
+    n = len(tokens)
     out: list[str] = []
-    for tok in raw.split():
+    for i, tok in enumerate(tokens):
         clean = tok.strip()
         if not clean:
             continue
-        letters = "".join(c for c in clean if c.isalpha())
+        letters = _letters_alpha_only(clean)
         if letters and clean.isupper() and clean in keep_acronyms:
             out.append(clean)
             continue
-        # Basic title-case for the token; handles O'BRIEN -> O'brien.
+        key = letters.lower()
+        if key == "the":
+            # Always "The" for the article (THE MAIDS → The Maids; X THE Y → X The Y).
+            rest = clean[len(letters) :] if letters else ""
+            out.append("The" + rest.lower() if rest else "The")
+            continue
+        # Lowercase minor words after first token (e.g. AND → and).
+        if i > 0 and key in _TITLE_LOWER_WORDS:
+            out.append(_lower_token_letters(clean))
+            continue
+        # First word or significant word: Title Case.
         out.append(clean[:1].upper() + clean[1:].lower() if len(clean) > 1 else clean.upper())
     return " ".join(out)
 

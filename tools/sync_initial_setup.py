@@ -125,6 +125,7 @@ def sync_initial_setup(contact_email):
     order_list_primary = None  # fallback when merchant has no catalog orders
     
     deal_prop_names = hubspot.get_deal_property_names()
+    DEAL_COPILOT_FIELD = "copilot_account_number"
     mapped_owner_from_sales_code = None
 
     for idx, copilot_id in enumerate(copilot_ids, 1):
@@ -163,13 +164,31 @@ def sync_initial_setup(contact_email):
                 extract_sales_code(merchant_data),
                 hubspot,
             )
-            existing_deals = hubspot.get_deals_for_contact(contact_id)
-            matching_deal = find_deal_for_merchant_business(existing_deals, merchant, copilot_id)
+            matching_deal = None
+            if DEAL_COPILOT_FIELD in deal_prop_names:
+                hits = hubspot.search_deals(
+                    property_name=DEAL_COPILOT_FIELD,
+                    value=str(copilot_id),
+                    properties=[
+                        "dealname",
+                        "dealstage",
+                        "createdate",
+                        "hs_lastmodifieddate",
+                        DEAL_COPILOT_FIELD,
+                    ],
+                    limit=5,
+                )
+                if hits:
+                    matching_deal = hits[0]
+            if not matching_deal:
+                existing_deals = hubspot.get_deals_for_contact(contact_id)
+                matching_deal = find_deal_for_merchant_business(existing_deals, merchant, copilot_id)
             
             if matching_deal:
                 deal_id = matching_deal.get("id")
                 deal_props_existing = matching_deal.get("properties", {}) or {}
                 current_dealname = (deal_props_existing.get("dealname") or "").strip()
+                updates = {}
                 if current_dealname != deal_name.strip():
                     hubspot._request(
                         "PATCH",
@@ -181,6 +200,18 @@ def sync_initial_setup(contact_email):
                     )
                 else:
                     print(f"   ℹ️  Deal exists: {deal_name}")
+                if DEAL_COPILOT_FIELD in deal_prop_names and (deal_props_existing.get(DEAL_COPILOT_FIELD) or "").strip() != str(copilot_id):
+                    updates[DEAL_COPILOT_FIELD] = str(copilot_id)
+                if updates:
+                    hubspot._request(
+                        "PATCH",
+                        f"/crm/v3/objects/deals/{deal_id}",
+                        {"properties": updates},
+                    )
+                try:
+                    hubspot.associate_deal_with_contact(deal_id, contact_id)
+                except Exception:
+                    pass
             else:
                 deal_amount = extract_deal_amount(merchant_data)
                 deal_props = {"dealname": deal_name, "dealstage": STAGE_INTERESTED}
@@ -193,6 +224,8 @@ def sync_initial_setup(contact_email):
                     deal_props["hubspot_owner_id"] = (
                         deal_owner_from_sales_code or current_props["hubspot_owner_id"]
                     )
+                if DEAL_COPILOT_FIELD in deal_prop_names:
+                    deal_props[DEAL_COPILOT_FIELD] = str(copilot_id)
                 response = hubspot._request("POST", "/crm/v3/objects/deals", {"properties": deal_props})
                 hubspot.associate_deal_with_contact(response["id"], contact_id)
                 print(f"   ✓ Deal created: {deal_name}")

@@ -219,6 +219,69 @@ class HubSpotClient:
         """Set of deal property internal names (for optional custom fields like ``sales_code``)."""
         response = self._request("GET", "/crm/v3/properties/deals")
         return {p["name"] for p in response.get("results", [])}
+
+    def create_deal_property_if_missing(
+        self,
+        *,
+        name: str,
+        label: str,
+        description: str = "",
+        group_name: str = "dealinformation",
+    ) -> bool:
+        """
+        Ensure a deal property exists.
+
+        Returns True if created, False if it already existed.
+        """
+        existing = self.get_deal_property_names()
+        if name in existing:
+            return False
+        payload = {
+            "name": name,
+            "label": label,
+            "description": description,
+            "groupName": group_name,
+            "type": "string",
+            "fieldType": "text",
+        }
+        self._request("POST", "/crm/v3/properties/deals", payload)
+        return True
+
+    def search_deals(
+        self,
+        *,
+        property_name: str,
+        value: str,
+        properties: list[str] | None = None,
+        limit: int = 10,
+    ) -> list[dict]:
+        """
+        Search deals by an exact property match.
+        """
+        payload: dict = {
+            "filterGroups": [
+                {
+                    "filters": [
+                        {
+                            "propertyName": property_name,
+                            "operator": "EQ",
+                            "value": value,
+                        }
+                    ]
+                }
+            ],
+            "limit": limit,
+        }
+        if properties:
+            payload["properties"] = properties
+        resp = self._request("POST", "/crm/v3/objects/deals/search", payload)
+        return resp.get("results", []) or []
+
+    def delete_deal(self, deal_id: str) -> dict:
+        """
+        Archive a deal in HubSpot (CRM v3 DELETE archives the record).
+        """
+        return self._request("DELETE", f"/crm/v3/objects/deals/{deal_id}")
     
     def get_contact_property_definition(self, property_name: str) -> dict:
         """
@@ -415,7 +478,31 @@ def deal_name_for_sync(merchant: dict) -> str:
     HubSpot ``dealname`` for deals created by sync: DBA only (no trailing `` - {copilot_id}``).
     """
     dba = str((merchant or {}).get("dbaName") or "Unknown").strip()
-    return dba or "Unknown"
+    return smart_title_case(dba) or "Unknown"
+
+
+def smart_title_case(s: str) -> str:
+    """
+    Title-case for DBA/deal names without mangling common acronyms too badly.
+
+    - Capitalizes the first letter of each alpha token
+    - Preserves all-uppercase tokens of length <= 4 (LLC/INC/USA/DBA/etc.)
+    """
+    raw = (s or "").strip()
+    if not raw:
+        return raw
+    out: list[str] = []
+    for tok in raw.split():
+        clean = tok.strip()
+        if not clean:
+            continue
+        letters = "".join(c for c in clean if c.isalpha())
+        if letters and clean.isupper() and len(letters) <= 4:
+            out.append(clean)
+            continue
+        # Basic title-case for the token; handles O'BRIEN -> O'brien.
+        out.append(clean[:1].upper() + clean[1:].lower() if len(clean) > 1 else clean.upper())
+    return " ".join(out)
 
 
 def _back_end_mid(merchant: dict) -> str | None:

@@ -128,6 +128,8 @@ def sync_with_status(contact_email):
     order_list_primary = None
     
     deal_prop_names = hubspot.get_deal_property_names()
+    # Optional dedupe key: if present on deals, prevent duplicate deals across contacts.
+    DEAL_COPILOT_FIELD = "copilot_account_number"
     mapped_owner_from_sales_code = None
 
     for idx, copilot_id in enumerate(copilot_ids, 1):
@@ -175,8 +177,38 @@ def sync_with_status(contact_email):
                 extract_sales_code(merchant_data),
                 hubspot,
             )
-            existing_deals = hubspot.get_deals_for_contact(contact_id)
-            matching_deal = find_deal_for_merchant_business(existing_deals, merchant, copilot_id)
+            matching_deal = None
+            if DEAL_COPILOT_FIELD in deal_prop_names:
+                hits = hubspot.search_deals(
+                    property_name=DEAL_COPILOT_FIELD,
+                    value=str(copilot_id),
+                    properties=[
+                        "dealname",
+                        "dealstage",
+                        "createdate",
+                        "hs_lastmodifieddate",
+                        "amount",
+                        "hubspot_owner_id",
+                        "sales_code",
+                        DEAL_COPILOT_FIELD,
+                    ],
+                    limit=5,
+                )
+                if len(hits) == 1:
+                    matching_deal = hits[0]
+                elif len(hits) > 1:
+                    # Prefer the most progressed dealstage; fall back to newest modified.
+                    def _rank(d: dict) -> tuple:
+                        p = d.get("properties") or {}
+                        stage = (p.get("dealstage") or "")
+                        modified = (p.get("hs_lastmodifieddate") or "")
+                        created = (p.get("createdate") or "")
+                        return (stage, modified, created)
+
+                    matching_deal = sorted(hits, key=_rank, reverse=True)[0]
+            if not matching_deal:
+                existing_deals = hubspot.get_deals_for_contact(contact_id)
+                matching_deal = find_deal_for_merchant_business(existing_deals, merchant, copilot_id)
             
             if matching_deal:
                 deal_id = matching_deal.get('id')
@@ -212,6 +244,11 @@ def sync_with_status(contact_email):
                     or "dealname" in deal_updates
                     or "closedate" in deal_updates
                 )
+                if DEAL_COPILOT_FIELD in deal_prop_names:
+                    # Ensure dedupe key is set even for legacy deals.
+                    if (deal_props_existing.get(DEAL_COPILOT_FIELD) or "").strip() != str(copilot_id):
+                        deal_updates[DEAL_COPILOT_FIELD] = str(copilot_id)
+                        should_patch_deal = True
                 if should_patch_deal:
                     hubspot._request("PATCH", f"/crm/v3/objects/deals/{deal_id}", {"properties": deal_updates})
                     rename_note = (
@@ -220,6 +257,11 @@ def sync_with_status(contact_email):
                         else ""
                     )
                     print(f"   ✓ Deal updated: {deal_name} → {stage_name}{rename_note}")
+                # Always associate matching deal to this contact (idempotent in HubSpot).
+                try:
+                    hubspot.associate_deal_with_contact(deal_id, contact_id)
+                except Exception:
+                    pass
             else:
                 deal_amount = extract_deal_amount(merchant_data)
                 owner_id = deal_owner_from_sales_code or current_props.get("hubspot_owner_id")
@@ -237,6 +279,8 @@ def sync_with_status(contact_email):
                     )
                     if boarded_ms:
                         deal_props["closedate"] = boarded_ms
+                if DEAL_COPILOT_FIELD in deal_prop_names:
+                    deal_props[DEAL_COPILOT_FIELD] = str(copilot_id)
                 response = hubspot._request("POST", "/crm/v3/objects/deals", {"properties": deal_props})
                 hubspot.associate_deal_with_contact(response["id"], contact_id)
                 print(f"   ✓ Deal created: {deal_name} ({stage_name})")

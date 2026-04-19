@@ -3,8 +3,8 @@
 Status-Aware Sync
 
 Checks CoPilot status and updates HubSpot accordingly:
-- Detects boarding status (Interested / Contract Sent / Boarded)
-- Updates deal stage to match reality
+- Detects boarding status (Interested / Contract Sent / Boarded / Live)
+- Updates deal stage to match reality (Live requires MTD or YTD ≥ threshold when CoPilot is LIVE, unless the deal is already Live in HubSpot — then it stays Live)
 - Updates all contact fields
 - Sets current processor if boarded ("CardChamp") or cancelled (blank)
 
@@ -42,9 +42,16 @@ from field_mappings import (
     volume_to_range,
 )
 from status_logic import (
+    STAGE_LIVE,
     get_deal_stage_from_status,
     get_status,
     get_current_processor,
+)
+from data_services.db import get_connection
+from data_services.aggregator import (
+    BOARDED_TO_LIVE_VOLUME_THRESHOLD_USD,
+    backend_mids_in_order,
+    has_qualifying_processing_volume,
 )
 from sales_code_owners import hubspot_owner_id_for_sales_code
 
@@ -63,12 +70,18 @@ def _copilot_datetime_to_hubspot_millis(dt_str):
     return str(int(dt.timestamp() * 1000))
 
 
-def sync_with_status(contact_email):
+def sync_with_status(contact_email, sticky_live=True):
     """
     Status-aware sync: Updates contact/deal based on CoPilot status.
+
+    Args:
+        contact_email: HubSpot contact email.
+        sticky_live: When True (default), if a deal is already at HubSpot stage Live, it is never
+            moved back to Boarded by the volume gate. When False, stages follow CoPilot + volume
+            only (for one-time migrations).
     """
     print("="*60)
-    print(f"STATUS-AWARE SYNC: {contact_email}")
+    print(f"STATUS-AWARE SYNC: {contact_email}" + ("" if sticky_live else " [sticky_live=off]"))
     print("="*60)
     
     copilot = MerchantAPI()
@@ -117,13 +130,14 @@ def sync_with_status(contact_email):
         print(f"   ✗ Error: {e}")
         return False
     
-    # Step 3: Fetch from CoPilot (iterate if multiple businesses)
+    # Step 3a: Fetch from CoPilot (all businesses), then volume gate, then HubSpot deals
     multi_business = len(copilot_ids) > 1
     first_merchant_data = None
     first_status_data = None
     first_signature_data = None
     all_status_data = []
     all_merchant_data = []
+    all_signature_data = []
     total_volume = 0
     order_list_primary = None
     
@@ -141,8 +155,6 @@ def sync_with_status(contact_email):
             signature_data = copilot.get_signature(copilot_id)
             
             merchant = merchant_data.get("merchant", {})
-            ownership = merchant.get("ownership", {}).get("owner", {})
-            demographic = merchant.get("demographic", {})
             processing = merchant.get("processing", {})
             
             print(f"   ✓ Retrieved: {merchant.get('dbaName')}")
@@ -162,17 +174,55 @@ def sync_with_status(contact_email):
                     print(f"   ℹ️  order/list: {e}")
             all_merchant_data.append(merchant_data)
             all_status_data.append(status_data)
+            all_signature_data.append(signature_data)
             
             if multi_business:
                 vol = merchant.get("processing", {}).get("volumeDetails", {}).get("averageMonthlyVolume")
                 if vol:
                     total_volume += vol
             
+        except Exception as e:
+            print(f"   ✗ Error: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    mids_for_volume = backend_mids_in_order(all_merchant_data)
+    volume_qualifies = None
+    try:
+        conn = get_connection()
+        try:
+            volume_qualifies = has_qualifying_processing_volume(conn, mids_for_volume)
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f"\n   ℹ️  Volume gate skipped (data services DB): {e}")
+
+    if not mids_for_volume:
+        print(f"\n   ℹ️  Volume gate skipped (no processing MID on merchant payload)")
+    elif volume_qualifies is False:
+        print(
+            f"\n   ℹ️  CoPilot LIVE but MTD/YTD below ${BOARDED_TO_LIVE_VOLUME_THRESHOLD_USD:,.0f} "
+            f"in data services → deal stage Boarded until threshold"
+        )
+
+    first_business_stage_for_summary = None
+
+    for idx, copilot_id in enumerate(copilot_ids, 1):
+        try:
+            merchant_data = all_merchant_data[idx - 1]
+            status_data = all_status_data[idx - 1]
+            signature_data = all_signature_data[idx - 1]
+            merchant = merchant_data.get("merchant", {})
+
             # Create/update deal for this business
             if idx == 1:
                 print(f"\n--- DEALS ---")
             deal_name = deal_name_for_sync(merchant)
-            stage_id, stage_name, stage_num = get_deal_stage_from_status(status_data, signature_data)
+            stage_id, stage_name, stage_num = get_deal_stage_from_status(
+                status_data, signature_data, has_qualifying_volume=volume_qualifies
+            )
+            computed_stage_num = stage_num
             deal_owner_from_sales_code = hubspot_owner_id_for_sales_code(
                 extract_sales_code(merchant_data),
                 hubspot,
@@ -214,6 +264,15 @@ def sync_with_status(contact_email):
                 deal_id = matching_deal.get('id')
                 deal_props_existing = matching_deal.get("properties", {})
                 current_stage = deal_props_existing.get('dealstage')
+                if sticky_live and current_stage == STAGE_LIVE:
+                    if computed_stage_num < 8 and idx == 1:
+                        print(
+                            "   ℹ️  Sticky Live: deal already Live in HubSpot — keeping Live "
+                            "(volume gate would use Boarded)"
+                        )
+                    stage_id = STAGE_LIVE
+                    stage_name = "Live"
+                    stage_num = 8
                 current_deal_owner = deal_props_existing.get("hubspot_owner_id")
                 current_dealname = (deal_props_existing.get("dealname") or "").strip()
                 deal_updates = {"dealstage": stage_id}
@@ -306,8 +365,16 @@ def sync_with_status(contact_email):
                 print(f"\n--- STATUS LOGIC ---")
                 print(f"Status '{boarding_status}' will set:")
                 print(f"→ Deal Stage: {stage_name} (Stage {stage_num})")
+                if boarding_status == "LIVE" and volume_qualifies is False and stage_name != "Live":
+                    print(
+                        f"→ Volume gate: CoPilot LIVE but MTD/YTD < ${BOARDED_TO_LIVE_VOLUME_THRESHOLD_USD:,.0f} "
+                        f"→ deal stays Boarded"
+                    )
                 print(f"→ Contact Status: {contact_status_val if contact_status_val else '(no change)'}")
                 print(f"→ Current Processor: {processor if processor is not None else '(no change)'}")
+            
+            if idx == 1:
+                first_business_stage_for_summary = stage_name
             
         except Exception as e:
             print(f"   ✗ Error: {e}")
@@ -478,7 +545,12 @@ def sync_with_status(contact_email):
             return False
     
     # Success
-    _, summary_stage_name, _ = get_deal_stage_from_status(first_status_data, first_signature_data)
+    if first_business_stage_for_summary is not None:
+        summary_stage_name = first_business_stage_for_summary
+    else:
+        _, summary_stage_name, _ = get_deal_stage_from_status(
+            first_status_data, first_signature_data, has_qualifying_volume=volume_qualifies
+        )
     print("\n" + "="*60)
     print("✓ STATUS-AWARE SYNC COMPLETE")
     print("="*60)

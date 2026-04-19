@@ -10,7 +10,7 @@ STAGE_CONTRACT_SENT = "contractsent"  # Stage 6: Contract Sent
 STAGE_BOARDED = "3573354"  # Stage 7: Boarded
 STAGE_LIVE = "closedwon"  # Stage 8: Live Customer
 
-def get_deal_stage_from_status(status_data, signature_data=None):
+def get_deal_stage_from_status(status_data, signature_data=None, has_qualifying_volume=None):
     """
     Determine which HubSpot deal stage based on CoPilot status and signature.
     
@@ -18,11 +18,17 @@ def get_deal_stage_from_status(status_data, signature_data=None):
     1. Interested (Stage 1) - Default
     2. Contract Sent (Stage 6) - Signature sent/signed
     3. Boarded (Stage 7) - gatewayBoardingStatusCd = BOARDED
-    4. Live (Stage 8) - boardingProcessStatusCd = LIVE
+    4. Live (Stage 8) - boardingProcessStatusCd = LIVE and (optional) processing volume
+    
+    When ``has_qualifying_volume`` is False, CoPilot LIVE still maps to Boarded (Stage 7)
+    until MTD or YTD volume from data services reaches the boarded-to-live threshold
+    (see ``BOARDED_TO_LIVE_VOLUME_THRESHOLD_USD`` in ``data_services.aggregator``). When None,
+    LIVE is not downgraded (CoPilot-only / unknown volume).
     
     Args:
         status_data: Status response from CoPilot API
         signature_data: Signature response from CoPilot API (optional)
+        has_qualifying_volume: None = do not apply volume gate; True/False from SQLite rollups
         
     Returns:
         tuple: (stage_id, stage_name, stage_number)
@@ -33,6 +39,8 @@ def get_deal_stage_from_status(status_data, signature_data=None):
     
     # Priority order: most progressed wins
     if boarding_status == "LIVE":
+        if has_qualifying_volume is False:
+            return (STAGE_BOARDED, "Boarded", 7)
         return (STAGE_LIVE, "Live", 8)
     
     if gateway_boarding == "BOARDED":

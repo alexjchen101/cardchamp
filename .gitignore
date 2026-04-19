@@ -4,6 +4,7 @@
 # Sync tracking data (contains merchant IDs)
 sync/tracked_merchants.json
 sync/last_batch_run.json
+sync/last_migrate_deal_stages.json
 
 # CardConnect Data Services (local state — rollups live in SQLite)
 data/sftp_downloads/*.csv

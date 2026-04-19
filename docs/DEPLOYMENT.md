@@ -27,6 +27,27 @@ pip install -r requirements.txt
 
 Create `.env` with the existing credentials used locally.
 
+## EC2 connection (same as photoncollective)
+
+If you are using the same EC2 box/key as PhotonCollective, the connection details are:
+
+- Hostname: `ec2-16-52-4-19.ca-central-1.compute.amazonaws.com`
+- Username: `ubuntu`
+- SSH key: `~/pair1.pem`
+- Project path: `~/cardchamp` (CardChamp repo folder on the instance)
+
+SSH:
+
+```bash
+ssh -i ~/pair1.pem ubuntu@ec2-16-52-4-19.ca-central-1.compute.amazonaws.com
+```
+
+One-liner to pull and run a sync:
+
+```bash
+ssh -i ~/pair1.pem ubuntu@ec2-16-52-4-19.ca-central-1.compute.amazonaws.com "cd ~/cardchamp && git pull origin main && ./.venv/bin/python jobs/run_go_live_pipeline.py"
+```
+
 Optional retry/timeouts can be tuned with:
 
 ```bash

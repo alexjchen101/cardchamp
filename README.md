@@ -16,6 +16,8 @@ python3 jobs/sync_with_status.py test@test.com
 python3 jobs/run_go_live_pipeline.py
 ```
 
+Cron on a server should call the same entrypoint (see `docs/DEPLOYMENT.md`).
+
 Or run the two steps yourself:
 
 ```bash

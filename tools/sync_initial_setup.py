@@ -42,7 +42,7 @@ from field_mappings import (
     volume_to_range,
 )
 
-from sales_code_owners import hubspot_owner_id_for_sales_code
+from sales_code_owners import hubspot_owner_id_for_sales_code, reload_sales_code_owner_map
 
 # Deal stage (always "Interested" for initial setup)
 STAGE_INTERESTED = "qualifiedtobuy"
@@ -69,7 +69,9 @@ def sync_initial_setup(contact_email):
     print("="*60)
     print(f"INITIAL SETUP: {contact_email}")
     print("="*60)
-    
+
+    reload_sales_code_owner_map()
+
     copilot = MerchantAPI()
     hubspot = HubSpotClient()
     

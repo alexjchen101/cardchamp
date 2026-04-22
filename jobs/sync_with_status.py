@@ -53,7 +53,7 @@ from data_services.aggregator import (
     backend_mids_in_order,
     has_qualifying_processing_volume,
 )
-from sales_code_owners import hubspot_owner_id_for_sales_code
+from sales_code_owners import hubspot_owner_id_for_sales_code, reload_sales_code_owner_map
 
 HUBSPOT_ACH_PROVIDER_PROPERTY = "ach___e_check_provider"
 
@@ -83,7 +83,9 @@ def sync_with_status(contact_email, sticky_live=True):
     print("="*60)
     print(f"STATUS-AWARE SYNC: {contact_email}" + ("" if sticky_live else " [sticky_live=off]"))
     print("="*60)
-    
+
+    reload_sales_code_owner_map()
+
     copilot = MerchantAPI()
     hubspot = HubSpotClient()
     

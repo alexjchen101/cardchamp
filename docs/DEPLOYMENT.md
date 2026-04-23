@@ -27,6 +27,65 @@ pip install -r requirements.txt
 
 Create `.env` with the existing credentials used locally.
 
+## Dashboard
+
+The dashboard is a Flask web app at `dashboard/server.py`. It runs on the EC2
+and serves the HTML + API endpoints that read/write real project files.
+
+### Start the server on the EC2
+
+```bash
+ssh -i ~/pair1.pem ubuntu@ec2-16-52-4-19.ca-central-1.compute.amazonaws.com
+cd ~/cardchamp
+source .venv/bin/activate
+python3 dashboard/server.py          # binds to 127.0.0.1:8050 by default
+```
+
+To keep it running after you disconnect:
+
+```bash
+nohup python3 dashboard/server.py > sync/dashboard.log 2>&1 &
+echo $! > sync/dashboard.pid        # save PID to kill later
+```
+
+To stop it:
+
+```bash
+kill $(cat sync/dashboard.pid)
+```
+
+### Access from your local machine (SSH tunnel)
+
+The server binds to `127.0.0.1` only (not exposed to the internet).
+Open a tunnel from your local machine:
+
+```bash
+ssh -i ~/pair1.pem -N -L 8050:localhost:8050 ubuntu@ec2-16-52-4-19.ca-central-1.compute.amazonaws.com
+```
+
+Then open **http://localhost:8050** in your browser. The `-N` flag keeps the
+tunnel open without starting a shell. Run it in a separate terminal tab.
+
+### Upload files directly to the EC2
+
+To push the owner mapping CSV from local to the EC2:
+
+```bash
+scp -i ~/pair1.pem data/owner_mapping.csv ubuntu@ec2-16-52-4-19.ca-central-1.compute.amazonaws.com:~/cardchamp/data/owner_mapping.csv
+```
+
+To pull the latest sync log down locally:
+
+```bash
+scp -i ~/pair1.pem ubuntu@ec2-16-52-4-19.ca-central-1.compute.amazonaws.com:~/cardchamp/sync/go_live_pipeline.log ./sync/
+```
+
+Or use the dashboard itself — the **Owner Map** tab lets you upload/download
+the CSV directly in the browser, which writes straight to `data/owner_mapping.csv`
+on the EC2 through the Flask API.
+
+---
+
 ## EC2 connection (same as photoncollective)
 
 If you are using the same EC2 box/key as PhotonCollective, the connection details are:

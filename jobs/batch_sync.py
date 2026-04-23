@@ -20,6 +20,7 @@ from hubspot.client import HubSpotClient
 from jobs.sync_with_status import sync_with_status
 
 DEFAULT_SUMMARY_FILE = ROOT / "sync" / "last_batch_run.json"
+HISTORY_FILE         = ROOT / "sync" / "run_history.json"
 
 
 def _emails_from_hubspot_with_copilot() -> list[str]:
@@ -39,6 +40,15 @@ def _emails_from_hubspot_with_copilot() -> list[str]:
 def _write_summary(summary_file: Path, summary: dict) -> None:
     summary_file.parent.mkdir(parents=True, exist_ok=True)
     summary_file.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    # Append to rolling history (last 50 runs) for the dashboard
+    history: list = []
+    if HISTORY_FILE.exists():
+        try:
+            history = json.loads(HISTORY_FILE.read_text())
+        except Exception:
+            history = []
+    history.insert(0, summary)
+    HISTORY_FILE.write_text(json.dumps(history[:50], indent=2), encoding="utf-8")
 
 
 def _run_batch(emails: list[str], summary_file: Path) -> int:

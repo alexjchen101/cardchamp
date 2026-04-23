@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CardChamp — Photon Collective</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #F7F5F0;
+  --surface:   #FFFFFF;
+  --text:      #0F0F0E;
+  --text-2:    #5C5A55;
+  --text-3:    #9B9890;
+  --accent:    #1A3A2A;
+  --accent-lt: #E8F0EB;
+  --cite:      #2D5A3D;
+  --border:    #E2DFD8;
+  --border-2:  #D0CCC4;
+  --warn:      #8B2E00;
+  --warn-lt:   #FDF0E8;
+  --r:         6px;
+  --r-sm:      4px;
+  --appbar-h:  44px;
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px;
+}
+
+html, body {
+  font-family: 'DM Sans', system-ui, sans-serif;
+  font-size: 14px; color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+/* ── App bar ────────────────────────────────────────────────────────── */
+.appbar {
+  position: fixed; top: 0; left: 0; right: 0;
+  height: var(--appbar-h);
+  background: var(--accent);
+  display: flex; align-items: center;
+  padding: 0 var(--s5); gap: var(--s4);
+  z-index: 100;
+  border-bottom: 1px solid rgba(255,255,255,.07);
+}
+.brand { display: flex; align-items: baseline; gap: 9px; user-select: none; flex-shrink: 0; }
+.brand-main {
+  font-family: 'DM Serif Display', serif;
+  font-size: 15px; color: rgba(255,255,255,.95); letter-spacing: -.015em;
+}
+.brand-sub { font-size: 12px; color: rgba(255,255,255,.38); letter-spacing: .02em; }
+.appbar-rule { width: 1px; height: 16px; background: rgba(255,255,255,.13); flex-shrink: 0; }
+.nav { display: flex; align-items: center; gap: 2px; }
+.nav-btn {
+  font-size: 13px; font-weight: 400;
+  color: rgba(255,255,255,.52);
+  padding: 5px 10px; border-radius: var(--r-sm);
+  cursor: pointer; user-select: none;
+  transition: color .14s, background .14s;
+}
+.nav-btn:hover  { color: rgba(255,255,255,.85); background: rgba(255,255,255,.07); }
+.nav-btn.active { color: rgba(255,255,255,1);   background: rgba(255,255,255,.13); }
+.appbar-end {
+  margin-left: auto;
+  font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  color: rgba(255,255,255,.3);
+}
+
+/* ── Shell ──────────────────────────────────────────────────────────── */
+.shell { margin-top: var(--appbar-h); }
+.view  { display: none; }
+.view.active { display: block; }
+
+/* ── Stats strip ────────────────────────────────────────────────────── */
+.stats-strip {
+  display: flex; align-items: center; gap: var(--s4); flex-wrap: wrap;
+  padding: 9px var(--s5);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px; color: var(--text-2);
+}
+.stat  { display: flex; align-items: center; gap: 5px; }
+.dot   { width: 6px; height: 6px; border-radius: 50%; background: var(--cite); flex-shrink: 0; }
+.dot.warn { background: var(--warn); }
+.dot.dim  { background: var(--border-2); }
+.val  {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; font-weight: 500; color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.val.warn { color: var(--warn); }
+.sep  { color: var(--border-2); }
+
+/* ── Trigger bar ────────────────────────────────────────────────────── */
+.trigger-bar {
+  display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap;
+  padding: var(--s3) var(--s5);
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+.trigger-lbl {
+  font-size: 10px; font-weight: 600; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--text-3); flex-shrink: 0;
+}
+.trigger-status {
+  margin-left: auto;
+  font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  color: var(--text-3); display: flex; align-items: center; gap: 5px;
+}
+
+/* ── Generic section ────────────────────────────────────────────────── */
+.section {
+  padding: var(--s5);
+  background: var(--surface);
+}
+.section + .section { border-top: 1px solid var(--border); }
+.section-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: var(--s4); gap: var(--s4); flex-wrap: wrap;
+}
+.section-lbl {
+  font-size: 10px; font-weight: 600; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--text-3);
+}
+.section-meta {
+  font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-3);
+}
+
+/* ── Buttons ────────────────────────────────────────────────────────── */
+.btn {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px; font-weight: 500;
+  height: 30px; padding: 0 var(--s3);
+  border-radius: var(--r-sm); cursor: pointer; white-space: nowrap;
+  transition: background .13s, border-color .13s, color .13s;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.btn-primary { color: #fff; background: var(--accent); border: none; }
+.btn-primary:hover { background: var(--cite); }
+.btn-ghost { color: var(--text-2); background: none; border: 1px solid var(--border); }
+.btn-ghost:hover { border-color: var(--border-2); color: var(--text); }
+
+/* ── Input ──────────────────────────────────────────────────────────── */
+.f-input {
+  height: 30px; padding: 0 var(--s3);
+  font-family: 'DM Sans', sans-serif; font-size: 13px;
+  color: var(--text); background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  outline: none; transition: border-color .13s;
+}
+.f-input::placeholder { color: var(--text-3); }
+.f-input:focus { border-color: var(--cite); }
+
+/* ── Tables ─────────────────────────────────────────────────────────── */
+.tbl-wrap { overflow-x: auto; }
+.tbl {
+  width: 100%; border-collapse: collapse;
+  font-size: 13px; font-variant-numeric: tabular-nums;
+}
+.tbl thead th {
+  text-align: left;
+  font-size: 10px; font-weight: 600; letter-spacing: .07em;
+  text-transform: uppercase; color: var(--text-3);
+  padding: 0 var(--s3) 9px; border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.tbl thead th:first-child { padding-left: 0; }
+.tbl tbody tr { border-bottom: 1px solid var(--border); transition: background .1s; }
+.tbl tbody tr:last-child { border-bottom: none; }
+.tbl tbody tr:hover { background: oklch(97.5% .004 130); }
+.tbl td { padding: 8px var(--s3); vertical-align: middle; }
+.tbl td:first-child { padding-left: 0; }
+
+/* Owner map table gets a bit more row height for readability */
+.tbl.owners td { padding: 10px var(--s3); }
+.tbl.owners td:first-child { padding-left: 0; }
+
+.c-mono { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: var(--cite); }
+.c-dim  { color: var(--text-2); }
+.c-ts   {
+  font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.c-sm   { font-size: 12px; color: var(--text-3); }
+
+/* ── Chips ──────────────────────────────────────────────────────────── */
+.chip {
+  display: inline-flex; align-items: center;
+  height: 19px; padding: 0 7px; border-radius: 10px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; font-weight: 500; white-space: nowrap;
+}
+.chip-ok     { background: var(--accent-lt); color: var(--cite); }
+.chip-fail   { background: var(--warn-lt);   color: var(--warn); }
+.chip-active { background: var(--accent-lt); color: var(--cite); }
+.chip-off    { background: oklch(95% .003 130); color: var(--text-3); }
+
+/* ── Log box ────────────────────────────────────────────────────────── */
+.log-box {
+  background: var(--bg);
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; line-height: 1.7;
+  color: var(--text-2);
+  padding: var(--s3) var(--s4);
+  max-height: 380px; overflow-y: auto;
+  white-space: pre-wrap; word-break: break-all;
+}
+.log-err { color: var(--warn); }
+.log-ok  { color: var(--cite); }
+.log-sep { color: var(--border-2); }
+
+/* ── Upload strip (horizontal, full-width) ──────────────────────────── */
+.upload-strip {
+  display: flex; align-items: center; gap: var(--s4);
+  padding: var(--s4) var(--s5);
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.upload-strip-zone {
+  flex: 1; min-width: 240px;
+  border: 1.5px dashed var(--border-2); border-radius: var(--r-sm);
+  padding: var(--s3) var(--s4);
+  display: flex; align-items: center; gap: var(--s3);
+  cursor: pointer; user-select: none;
+  transition: border-color .14s, background .14s;
+  background: var(--surface);
+}
+.upload-strip-zone:hover, .upload-strip-zone.drag {
+  border-color: var(--cite); background: var(--accent-lt);
+}
+.upload-strip-zone input[type="file"] { display: none; }
+.upload-strip-text { display: flex; flex-direction: column; gap: 2px; }
+.upload-strip-text strong { font-size: 13px; font-weight: 500; color: var(--text); }
+.upload-strip-text span   { font-size: 11px; color: var(--text-3); font-family: 'JetBrains Mono', monospace; }
+
+.upload-strip-meta {
+  display: flex; flex-direction: column; gap: 4px;
+  flex-shrink: 0;
+}
+.upload-strip-meta-row {
+  display: flex; align-items: center; gap: var(--s2);
+  font-size: 11px; color: var(--text-3);
+}
+.upload-strip-meta-row strong {
+  font-family: 'JetBrains Mono', monospace; color: var(--text-2); font-weight: 400;
+}
+
+.upload-ok-pill {
+  display: none; align-items: center; gap: var(--s2);
+  padding: 4px var(--s3);
+  background: var(--accent-lt); border-radius: 20px;
+  font-size: 12px; color: var(--cite); white-space: nowrap;
+}
+
+/* ── Spinner ────────────────────────────────────────────────────────── */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner {
+  width: 11px; height: 11px;
+  border: 1.5px solid rgba(255,255,255,.3); border-top-color: #fff;
+  border-radius: 50%; animation: spin .65s linear infinite; flex-shrink: 0;
+}
+.spinner.dark { border-color: var(--border-2); border-top-color: var(--cite); }
+
+/* ── Toast ──────────────────────────────────────────────────────────── */
+.toast {
+  position: fixed; bottom: var(--s5); right: var(--s5);
+  padding: 9px 15px; background: var(--accent); color: #fff;
+  border-radius: var(--r); font-size: 13px; font-weight: 500;
+  box-shadow: 0 4px 16px rgba(15,15,14,.12);
+  transform: translateY(72px); opacity: 0;
+  transition: transform .2s cubic-bezier(.22,1,.36,1), opacity .2s;
+  z-index: 400; pointer-events: none;
+}
+.toast.show { transform: translateY(0); opacity: 1; }
+.toast.err  { background: var(--warn); }
+
+/* ── Scrollbar ──────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- App bar -->
+<header class="appbar">
+  <div class="brand">
+    <span class="brand-main">Photon Collective</span>
+    <span class="brand-sub">CardChamp</span>
+  </div>
+  <div class="appbar-rule"></div>
+  <nav class="nav">
+    <div class="nav-btn active" data-view="sync">Sync</div>
+    <div class="nav-btn" data-view="owners">Owner Map</div>
+  </nav>
+  <div class="appbar-end" id="api-badge">connecting…</div>
+</header>
+
+<div class="shell">
+
+<!-- ══════════════════════════════════ SYNC VIEW -->
+<div class="view active" id="view-sync">
+
+  <!-- Stats strip -->
+  <div class="stats-strip" id="stats-strip">
+    <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-3);">loading…</span>
+  </div>
+
+  <!-- Trigger bar -->
+  <div class="trigger-bar">
+    <span class="trigger-lbl">Trigger</span>
+    <button class="btn btn-primary" id="batch-btn" onclick="triggerBatch()">Run Batch Sync</button>
+    <div style="display:flex;align-items:center;gap:var(--s2);">
+      <input class="f-input" id="single-email" type="text" placeholder="single contact email"
+             style="width:220px;font-family:'JetBrains Mono',monospace;font-size:12px;">
+      <button class="btn btn-ghost" onclick="triggerSingle()">Sync One</button>
+    </div>
+    <div class="trigger-status" id="trigger-status"></div>
+  </div>
+
+  <!-- Run history -->
+  <div class="section">
+    <div class="section-head">
+      <span class="section-lbl">Run History</span>
+      <div style="display:flex;align-items:center;gap:var(--s2);">
+        <span class="section-meta" id="history-meta"></span>
+        <button class="btn btn-ghost" onclick="loadAll()">Refresh</button>
+      </div>
+    </div>
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead><tr>
+          <th>Timestamp (UTC)</th>
+          <th>Result</th>
+          <th>Total</th>
+          <th>Succeeded</th>
+          <th>Failed</th>
+          <th>Failed contacts</th>
+        </tr></thead>
+        <tbody id="history-tbody">
+          <tr><td colspan="6" style="color:var(--text-3);font-size:12px;padding:var(--s5) 0;">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Cron log -->
+  <div class="section">
+    <div class="section-head">
+      <span class="section-lbl">Cron Log</span>
+      <div style="display:flex;align-items:center;gap:var(--s3);">
+        <span class="section-meta" id="log-path"></span>
+        <button class="btn btn-ghost" onclick="loadLog()">Refresh</button>
+      </div>
+    </div>
+    <div class="log-box" id="log-box">
+      <span style="color:var(--text-3);">Loading…</span>
+    </div>
+  </div>
+
+</div><!-- /sync -->
+
+<!-- ══════════════════════════════════ OWNER MAP VIEW -->
+<div class="view" id="view-owners">
+
+  <!-- Upload strip — full width, horizontal -->
+  <div class="upload-strip">
+
+    <div class="upload-strip-zone" id="drop-zone"
+         onclick="document.getElementById('csv-input').click()">
+      <input type="file" id="csv-input" accept=".csv" onchange="uploadCSV(this)">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style="flex-shrink:0; opacity:.4;">
+        <path d="M10 3v10M6 7l4-4 4 4M4 14h12v2H4v-2z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <div class="upload-strip-text">
+        <strong>Drop owner_mapping.csv or click to upload</strong>
+        <span>same file format as data/owner_mapping.csv — merges into existing map</span>
+      </div>
+    </div>
+
+    <div class="upload-strip-meta" id="upload-meta">
+      <div class="upload-strip-meta-row">
+        <span>file</span>
+        <strong id="meta-filename">—</strong>
+      </div>
+      <div class="upload-strip-meta-row">
+        <span>rows</span>
+        <strong id="meta-rows">—</strong>
+      </div>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:var(--s2);flex-shrink:0;">
+      <div class="upload-ok-pill" id="upload-ok">
+        <span>✓</span><span id="upload-ok-text">—</span>
+      </div>
+      <button class="btn btn-ghost" onclick="downloadCSV()">Download CSV</button>
+    </div>
+
+  </div>
+
+  <!-- Owner map table — full width -->
+  <div class="section">
+    <div class="section-head">
+      <span class="section-lbl">Current Map</span>
+      <span class="section-meta" id="owners-count">—</span>
+    </div>
+    <div class="tbl-wrap">
+      <table class="tbl owners">
+        <thead><tr>
+          <th>Sales Code</th>
+          <th>Descriptor</th>
+          <th>First Name</th>
+          <th>Last Name</th>
+          <th>User ID</th>
+          <th>Email</th>
+          <th>Active</th>
+        </tr></thead>
+        <tbody id="owners-tbody">
+          <tr><td colspan="7" style="color:var(--text-3);font-size:12px;padding:var(--s5) 0;">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div><!-- /owners -->
+
+</div><!-- /shell -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── API ───────────────────────────────────────────────────────────────────────
+async function api(path, opts = {}) {
+  const res = await fetch(path, opts);
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.json();
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+let toastTmr;
+function toast(msg, err) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className   = 'toast' + (err ? ' err' : '');
+  el.classList.add('show');
+  clearTimeout(toastTmr);
+  toastTmr = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// ── Nav ───────────────────────────────────────────────────────────────────────
+document.querySelectorAll('.nav-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v  => v.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('view-' + btn.dataset.view).classList.add('active');
+  });
+});
+
+// ── Stats strip ───────────────────────────────────────────────────────────────
+function renderStats(run) {
+  const el = document.getElementById('stats-strip');
+  if (!run?.timestamp_utc) {
+    el.innerHTML = `<span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-3);">No sync runs found yet.</span>`;
+    return;
+  }
+  const ts = run.timestamp_utc.replace('T', ' ').slice(0, 16) + ' UTC';
+  const f  = run.failed || 0;
+  el.innerHTML = `
+    <div class="stat">
+      <div class="dot${f > 0 ? ' warn' : ''}"></div>
+      <span>Last run</span><span class="val">${ts}</span>
+    </div>
+    <span class="sep">·</span>
+    <div class="stat"><span>Total</span><span class="val">${run.total ?? '—'}</span></div>
+    <span class="sep">·</span>
+    <div class="stat"><span>Succeeded</span><span class="val">${run.succeeded ?? '—'}</span></div>
+    <span class="sep">·</span>
+    <div class="stat">
+      ${f > 0 ? '<div class="dot warn"></div>' : ''}
+      <span>Failed</span>
+      <span class="val${f > 0 ? ' warn' : ''}">${f}</span>
+    </div>
+    <span class="sep">·</span>
+    <div class="stat"><span>Mode</span><span class="val">${run.mode ?? '—'}</span></div>`;
+}
+
+// ── Run history ───────────────────────────────────────────────────────────────
+function renderHistory(lastRun, history) {
+  const rows = history.length ? history : (lastRun?.timestamp_utc ? [lastRun] : []);
+  document.getElementById('history-meta').textContent =
+    rows.length ? `${rows.length} run${rows.length !== 1 ? 's' : ''}` : '';
+
+  if (!rows.length) {
+    document.getElementById('history-tbody').innerHTML =
+      `<tr><td colspan="6" style="color:var(--text-3);font-size:12px;padding:var(--s5) 0;">No history yet — accumulates in sync/run_history.json after each batch.</td></tr>`;
+    return;
+  }
+
+  document.getElementById('history-tbody').innerHTML = rows.map(r => {
+    const f  = r.failed || 0;
+    const fc = (r.failed_contacts || []).join(', ') || '—';
+    const ts = (r.timestamp_utc || '').replace('T', ' ').slice(0, 16);
+    return `
+    <tr>
+      <td><span class="c-ts">${ts}</span></td>
+      <td>${f > 0 ? `<span class="chip chip-fail">${f} failed</span>` : `<span class="chip chip-ok">OK</span>`}</td>
+      <td>${r.total ?? '—'}</td>
+      <td style="color:var(--cite);">${r.succeeded ?? '—'}</td>
+      <td style="${f > 0 ? 'color:var(--warn);' : ''}">${f}</td>
+      <td class="c-sm" style="${f > 0 ? 'color:var(--warn);' : ''} max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+          title="${esc(fc)}">${esc(fc)}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Log ───────────────────────────────────────────────────────────────────────
+async function loadLog() {
+  const box = document.getElementById('log-box');
+  try {
+    const data = await api('/api/sync-log');
+    document.getElementById('log-path').textContent =
+      data.file ? data.file.split('/').slice(-2).join('/') : '';
+
+    if (!data.lines?.length) {
+      box.innerHTML = `<span style="color:var(--text-3);">Log not found — will appear here once the cron job runs.\nExpected at: sync/go_live_pipeline.log</span>`;
+      return;
+    }
+    box.innerHTML = data.lines.map(line => {
+      const l = esc(line);
+      if (/error|fail|exception|traceback/i.test(line)) return `<div class="log-err">${l}</div>`;
+      if (/succeed|success|\blive\b|boarded|synced/i.test(line)) return `<div class="log-ok">${l}</div>`;
+      if (/^---/.test(line.trim())) return `<div class="log-sep">${l}</div>`;
+      return `<div>${l}</div>`;
+    }).join('');
+    box.scrollTop = box.scrollHeight;
+  } catch {
+    box.innerHTML = `<span style="color:var(--text-3);">Could not load log.</span>`;
+  }
+}
+
+// ── Sync triggers ─────────────────────────────────────────────────────────────
+async function triggerBatch() {
+  const btn = document.getElementById('batch-btn');
+  btn.innerHTML = `<span class="spinner"></span>Starting…`;
+  btn.disabled  = true;
+  setStatus('running batch…', true);
+  try {
+    const res = await api('/api/sync/trigger', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({}),
+    });
+    setStatus(`batch queued · ${res.target}`, false);
+    toast('Batch sync started — check log for progress');
+    setTimeout(loadSync, 5000);
+  } catch (e) {
+    setStatus('trigger failed', false);
+    toast('Trigger failed: ' + e.message, true);
+  } finally {
+    btn.innerHTML = 'Run Batch Sync';
+    btn.disabled  = false;
+  }
+}
+
+async function triggerSingle() {
+  const email = document.getElementById('single-email').value.trim();
+  if (!email) { document.getElementById('single-email').focus(); return; }
+  setStatus(`syncing ${email}…`, true);
+  try {
+    await api('/api/sync/trigger', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({email}),
+    });
+    setStatus(`queued · ${email}`, false);
+    document.getElementById('single-email').value = '';
+    toast('Sync started for ' + email);
+    setTimeout(loadSync, 5000);
+  } catch (e) {
+    setStatus('trigger failed', false);
+    toast('Trigger failed: ' + e.message, true);
+  }
+}
+
+function setStatus(msg, spinning) {
+  document.getElementById('trigger-status').innerHTML = spinning
+    ? `<span class="spinner dark"></span>${msg}`
+    : msg;
+}
+
+// ── Owner map ─────────────────────────────────────────────────────────────────
+async function loadOwners() {
+  try {
+    const rows = await api('/api/owners');
+    document.getElementById('owners-count').textContent = `${rows.length} rows`;
+    document.getElementById('meta-rows').textContent    = rows.length;
+
+    document.getElementById('owners-tbody').innerHTML = rows.length
+      ? rows.map(r => `
+          <tr>
+            <td><span class="c-mono">${esc(r.sales_code)}</span></td>
+            <td class="c-dim">${esc(r.descriptor || '—')}</td>
+            <td>${esc(r.first_name || '—')}</td>
+            <td>${esc(r.last_name  || '—')}</td>
+            <td><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-2);">${esc(r.user_id || '—')}</span></td>
+            <td class="c-sm">${esc(r.email || '—')}</td>
+            <td>${r.active
+              ? `<span class="chip chip-active">Active</span>`
+              : `<span class="chip chip-off">Inactive</span>`}</td>
+          </tr>`).join('')
+      : `<tr><td colspan="7" style="color:var(--text-3);font-size:12px;padding:var(--s5) 0;">No rows. Upload owner_mapping.csv to populate.</td></tr>`;
+  } catch {
+    document.getElementById('owners-tbody').innerHTML =
+      `<tr><td colspan="7" style="color:var(--text-3);font-size:12px;padding:var(--s4) 0;">Could not load — is the server running?</td></tr>`;
+  }
+}
+
+async function uploadCSV(input) {
+  if (!input.files.length) return;
+  const file     = input.files[0];
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const res  = await fetch('/api/owners/upload', {method: 'POST', body: formData});
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || res.statusText);
+
+    document.getElementById('meta-filename').textContent = file.name;
+    document.getElementById('meta-rows').textContent     = data.rows;
+
+    const pill = document.getElementById('upload-ok');
+    document.getElementById('upload-ok-text').textContent =
+      `${data.uploaded} rows uploaded · ${data.rows} total`;
+    pill.style.display = 'flex';
+    setTimeout(() => pill.style.display = 'none', 6000);
+
+    toast(`Imported · ${data.rows} rows in map`);
+    await loadOwners();
+  } catch (e) {
+    toast('Upload failed: ' + e.message, true);
+  }
+  input.value = '';
+}
+
+function downloadCSV() {
+  window.location.href = '/api/owners/download';
+}
+
+// ── Drag-drop ─────────────────────────────────────────────────────────────────
+const dz = document.getElementById('drop-zone');
+dz.addEventListener('dragover',  e => { e.preventDefault(); dz.classList.add('drag'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag'));
+dz.addEventListener('drop', async e => {
+  e.preventDefault(); dz.classList.remove('drag');
+  const file = e.dataTransfer.files[0];
+  if (file) await uploadCSV({files: [file], value: ''});
+});
+
+// ── Load sync data ────────────────────────────────────────────────────────────
+async function loadSync() {
+  try {
+    const data = await api('/api/status');
+    renderStats(data.last_run);
+    renderHistory(data.last_run, data.history || []);
+    document.getElementById('api-badge').textContent = 'connected';
+  } catch {
+    document.getElementById('api-badge').textContent = 'server offline';
+    document.getElementById('api-badge').style.color = 'rgba(224,112,80,.8)';
+    document.getElementById('stats-strip').innerHTML =
+      `<span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-3);">Cannot reach server — run: python3 dashboard/server.py</span>`;
+  }
+}
+
+// ── Utils ─────────────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function loadAll() {
+  await Promise.all([loadSync(), loadLog(), loadOwners()]);
+}
+loadAll();
+</script>
+</body>
+</html>
